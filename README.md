@@ -1,0 +1,2 @@
+# DarkestDungeonModBoxLite
+DarkestDungeonModBox Lite version
