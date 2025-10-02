@@ -1,4 +1,4 @@
-module DarkestDungeonModBoxLite2
+module DarkestDungeonModBoxLite
 
 go 1.23
 
