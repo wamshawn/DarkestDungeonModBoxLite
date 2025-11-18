@@ -1,6 +1,6 @@
 /// <reference lib="es2015.promise" />
 
-import {Result, Error} from "./models";
+import {Result} from "./models";
 
 export type NoParamHandler<R extends any> = () => Promise<R>;
 
@@ -17,6 +17,6 @@ export const rpc = async <P extends any, R extends any>(h: Handler<P, R> | NoPar
             return Result.succeed(v);
         }
     } catch (e: any) {
-        return Result.failed(new Error(e))
+        return Result.failed(e)
     }
 }

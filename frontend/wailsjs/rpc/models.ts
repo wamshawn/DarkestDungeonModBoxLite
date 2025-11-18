@@ -1,18 +1,22 @@
-export class Error {
-    private readonly msg: string
 
-    constructor(msg: string) {
-        this.msg = msg
+export class Failure {
+    error: string;
+    description: string;
+
+    static createFrom(source: any = {}) {
+        return new Failure(source);
     }
 
-    message(): string {
-        return this.msg
+    constructor(source: any = {}) {
+        if ('string' === typeof source) source = JSON.parse(source);
+        this.error = source["error"];
+        this.description = source["description"];
     }
 }
 
 export class Result<T extends any> {
     private data: T | undefined
-    private error?: Error
+    private error?: Array<Failure>
 
     static succeed<T>(data: T) {
         const r = new Result<T>();
@@ -20,7 +24,8 @@ export class Result<T extends any> {
         return r;
     }
 
-    static failed<T>(error: Error) {
+    static failed<T>(error: any) {
+        if ('string' === typeof error) error = JSON.parse(error);
         const r = new Result<T>();
         r.error = error
         return r;
@@ -34,11 +39,11 @@ export class Result<T extends any> {
         return this.error !== undefined
     }
 
-    cause(): string {
+    cause(): Array<Failure> {
         if (this.error) {
-            return this.error.message()
+            return this.error
         }
-        return "no error"
+        return new Array<Failure>();
     }
 
     value(): T {
