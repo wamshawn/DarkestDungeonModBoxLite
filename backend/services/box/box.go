@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"DarkestDungeonModBoxLite/backend/pkg/databases"
+	"DarkestDungeonModBoxLite/backend/pkg/failure"
 	"DarkestDungeonModBoxLite/backend/pkg/tasks"
 )
 
@@ -40,7 +41,7 @@ func (bx *Box) shutdown(_ context.Context) {
 
 func (bx *Box) database() (*databases.Database, error) {
 	if bx.db == nil {
-		return nil, ErrOpened
+		return nil, failure.Failed("错误", "数据库未打开")
 	}
 	return bx.db, nil
 }

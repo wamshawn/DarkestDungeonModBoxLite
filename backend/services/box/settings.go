@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"DarkestDungeonModBoxLite/backend/pkg/databases"
+	"DarkestDungeonModBoxLite/backend/pkg/failure"
 	"DarkestDungeonModBoxLite/backend/pkg/files"
 	"DarkestDungeonModBoxLite/backend/pkg/programs"
 )
@@ -35,7 +36,7 @@ func (bx *Box) Settings() (v Settings, err error) {
 		return
 	}
 	if _, err = db.Get(settingsKey, &v); err != nil {
-		err = ErrGetSettings
+		err = failure.Failed("获取设置失败", err.Error())
 		return
 	}
 	if v.Game == "" && v.Steam == "" {
@@ -75,7 +76,7 @@ func (bx *Box) SetSettings(v Settings) (err error) {
 		return
 	}
 	if err = db.Update(settingsKey, v); err != nil {
-		err = ErrSetSettings
+		err = failure.Failed("保存设置失败", err.Error())
 		return
 	}
 	return

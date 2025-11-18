@@ -6,14 +6,15 @@ import {
 } from '@ant-design/icons';
 
 import {Outlet, useLocation, useNavigate} from "react-router-dom";
-import {App, Avatar, Breadcrumb, Button, Layout, Menu, MenuProps, Spin} from 'antd';
+import {App, Layout, Menu, MenuProps, Spin} from 'antd';
 import {useAsyncEffect} from "ahooks";
 import {proxy} from "valtio/vanilla";
 import {useSnapshot} from "valtio/react";
 import {rpc} from "../../wailsjs/rpc/rpc";
 import {Open} from "../../wailsjs/go/box/Box";
 import {box} from "../../wailsjs/go/models";
-const { Header, Content, Footer, Sider } = Layout;
+import {WindowMaximise} from "../../wailsjs/runtime";
+const { Header, Content, Sider } = Layout;
 
 
 type MenuItem = Required<MenuProps>['items'][number];
@@ -58,9 +59,13 @@ const Index: React.FC = () => {
         const r = await rpc<void, box.Settings>(Open)
         state.loading = false;
         if (r.failed()) {
-            notification.error({message: "错误", description:r.cause(), placement:"bottomRight"})
+            const errs = r.cause()
+            for (let i = 0; i < errs.length; i++) {
+                notification.error({message: errs[i].error, description:errs[i].description, placement:"bottomRight", role:"alert"})
+            }
             return;
         }
+        WindowMaximise();
         const settings = r.value()
         if (settings.mods == "" || settings.game == "") {
             state.menuKey = 'settings';
@@ -74,7 +79,7 @@ const Index: React.FC = () => {
 
     return (
         <Layout style={{ minHeight: '100vh' }}>
-            <Spin spinning={snap.loading}  fullscreen />
+            <Spin spinning={snap.loading} size={"large"} fullscreen />
             <Sider collapsed={true} collapsedWidth={60} >
                 <Menu
                     theme="dark"
