@@ -6,7 +6,7 @@ import {
 } from '@ant-design/icons';
 
 import {Outlet, useLocation, useNavigate} from "react-router-dom";
-import {Avatar, Breadcrumb, Button, Layout, Menu, MenuProps, Spin} from 'antd';
+import {App, Avatar, Breadcrumb, Button, Layout, Menu, MenuProps, Spin} from 'antd';
 import {useAsyncEffect} from "ahooks";
 import {proxy} from "valtio/vanilla";
 import {useSnapshot} from "valtio/react";
@@ -49,6 +49,7 @@ const state = proxy<State>({
 });
 
 const Index: React.FC = () => {
+    const { notification } = App.useApp();
     const navigate = useNavigate();
     const snap = useSnapshot(state)
 
@@ -57,11 +58,10 @@ const Index: React.FC = () => {
         const r = await rpc<void, box.Settings>(Open)
         state.loading = false;
         if (r.failed()) {
-            console.log(r.cause())
+            notification.error({message: "错误", description:r.cause(), placement:"bottomRight"})
             return;
         }
         const settings = r.value()
-        console.log("settings", settings)
         if (settings.mods == "" || settings.game == "") {
             state.menuKey = 'settings';
             navigate('settings');

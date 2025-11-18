@@ -4,6 +4,7 @@ import './style.css'
 import {DevSupport} from "@react-buddy/ide-toolbox";
 import {ComponentPreviews, useInitial} from "./dev";
 import {App, ConfigProvider, theme} from 'antd';
+import locale from 'antd/locale/zh_CN';
 import {RouterProvider} from "react-router-dom";
 import router from "./router/router";
 
@@ -17,7 +18,7 @@ root.render(
         <DevSupport ComponentPreviews={ComponentPreviews}
                     useInitialHook={useInitial}
         >
-            <ConfigProvider theme={{algorithm: theme.darkAlgorithm}}>
+            <ConfigProvider theme={{algorithm: theme.darkAlgorithm}} locale={locale}>
                 <App>
                     <RouterProvider router={router} />
                 </App>
