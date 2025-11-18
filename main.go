@@ -20,14 +20,13 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "DarkestDungeonModBoxLite",
-		Width:  1024,
-		Height: 768,
+		Title:     "DarkestDungeonModBoxLite",
+		MinWidth:  1024,
+		MinHeight: 768,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.Startup,
+		OnStartup: app.Startup,
 		OnBeforeClose: func(ctx context.Context) (prevent bool) {
 			app.Shutdown(ctx)
 			return false
