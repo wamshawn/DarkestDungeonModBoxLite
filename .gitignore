@@ -1,6 +1,11 @@
+### WAILS
 build/bin
-node_modules
 frontend/dist
+frontend/node_modules
+
+### work dir
+database
+mods
 
 ### VSCODE
 .vscode
