@@ -6,10 +6,6 @@ export function CancelImportMod(arg1) {
   return window['go']['box']['Box']['CancelImportMod'](arg1);
 }
 
-export function Greet(arg1) {
-  return window['go']['box']['Box']['Greet'](arg1);
-}
-
 export function ImportMod() {
   return window['go']['box']['Box']['ImportMod']();
 }

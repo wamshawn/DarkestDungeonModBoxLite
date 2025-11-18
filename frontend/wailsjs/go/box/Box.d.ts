@@ -4,8 +4,6 @@ import {box} from '../models';
 
 export function CancelImportMod(arg1:string):Promise<void>;
 
-export function Greet(arg1:string):Promise<string>;
-
 export function ImportMod():Promise<box.ImportMod>;
 
 export function Open():Promise<box.Settings>;
