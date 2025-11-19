@@ -6,6 +6,10 @@ export function CancelImportMod(arg1:string):Promise<void>;
 
 export function ImportMod():Promise<box.ImportMod>;
 
+export function ListModules():Promise<Array<box.WorkshopModule>>;
+
+export function Module(arg1:string):Promise<box.Module>;
+
 export function Open():Promise<box.Settings>;
 
 export function SetSettings(arg1:box.Settings):Promise<void>;

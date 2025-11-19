@@ -156,14 +156,14 @@ const (
 	TrinketMod = "trinket"
 )
 
-type Mod struct {
+type Module struct {
 	Id    string `json:"id"`
 	Kind  string `json:"kind"`
 	Title string `json:"title"`
 	Index uint   `json:"index"`
 }
 
-func (mod *Mod) Key() string {
+func (mod *Module) Key() string {
 	return fmt.Sprintf("mod:%s", mod.Id)
 }
 

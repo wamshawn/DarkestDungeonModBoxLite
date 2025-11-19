@@ -3,6 +3,7 @@ import {
     ReconciliationOutlined,
     AppstoreAddOutlined,
     SettingOutlined,
+    GiftOutlined,
 } from '@ant-design/icons';
 
 import {Outlet, useLocation, useNavigate} from "react-router-dom";
@@ -36,7 +37,8 @@ function getItem(
 const items: MenuItem[] = [
     getItem('方案', 'plans', <ReconciliationOutlined />),
     getItem('模组', 'modules', <AppstoreAddOutlined />),
-    getItem('设置', 'settings', <SettingOutlined />),
+    getItem('工坊', 'steam', <GiftOutlined />),
+    getItem('设置', 'settings', <SettingOutlined/>),
 ];
 
 type State = {
@@ -50,7 +52,7 @@ const state = proxy<State>({
 });
 
 const Index: React.FC = () => {
-    const { notification } = App.useApp();
+    const {notification} = App.useApp();
     const navigate = useNavigate();
     const snap = useSnapshot(state)
 
@@ -61,11 +63,16 @@ const Index: React.FC = () => {
         if (r.failed()) {
             const errs = r.cause()
             for (let i = 0; i < errs.length; i++) {
-                notification.error({message: errs[i].error, description:errs[i].description, placement:"bottomRight", role:"alert"})
+                notification.error({
+                    message: errs[i].error,
+                    description: errs[i].description,
+                    placement: "bottomRight",
+                    role: "alert"
+                })
             }
             return;
         }
-        WindowMaximise();
+        // WindowMaximise();
         const settings = r.value()
         if (settings.mods == "" || settings.game == "") {
             state.menuKey = 'settings';
@@ -78,18 +85,34 @@ const Index: React.FC = () => {
     }, [])
 
     return (
-        <Layout style={{ minHeight: '100vh' }}>
-            <Spin spinning={snap.loading} size={"large"} fullscreen />
-            <Sider collapsed={true} collapsedWidth={60} >
+        <Layout style={{minHeight: '100vh'}}>
+            <Spin spinning={snap.loading} size={"large"} fullscreen/>
+            <Sider collapsed={true} collapsedWidth={60}
+                   style={{
+                       overflow: 'auto',
+                       height: '100vh',
+                       position: 'sticky',
+                       insetInlineStart: 0,
+                       top: 0,
+                       bottom: 0,
+                       scrollbarWidth: 'thin',
+                   }}
+            >
                 <Menu
                     theme="dark"
                     selectedKeys={[snap.menuKey]} mode="inline" items={items}
                     onClick={({key}) => {
                         if (key === "plans") {
+                            state.menuKey = 'plans';
                             navigate("plans")
                         } else if (key === "modules") {
+                            state.menuKey = 'modules';
                             navigate("modules")
+                        } else if (key === "steam") {
+                            state.menuKey = 'steam';
+                            navigate("steam")
                         } else if (key === "settings") {
+                            state.menuKey = 'settings';
                             navigate("settings")
                         }
                     }}
@@ -97,7 +120,7 @@ const Index: React.FC = () => {
                 />
             </Sider>
             <Layout>
-                <Content style={{ margin: '16px' }}>
+                <Content style={{ margin: '30px' }}>
                     <Outlet/>
                 </Content>
             </Layout>

@@ -10,6 +10,14 @@ export function ImportMod() {
   return window['go']['box']['Box']['ImportMod']();
 }
 
+export function ListModules() {
+  return window['go']['box']['Box']['ListModules']();
+}
+
+export function Module(arg1) {
+  return window['go']['box']['Box']['Module'](arg1);
+}
+
 export function Open() {
   return window['go']['box']['Box']['Open']();
 }

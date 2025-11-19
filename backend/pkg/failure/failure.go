@@ -1,6 +1,8 @@
 package failure
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type Failure struct {
 	Title       string `json:"error"`
@@ -16,6 +18,18 @@ func (f Failures) Error() string {
 
 func (f Failures) Append(title, description string) Failures {
 	return append(f, Failure{Title: title, Description: description})
+}
+
+func (f Failures) Wrap(err error) Failures {
+	if err == nil {
+		return f
+	}
+	switch e := err.(type) {
+	case Failures:
+		return append(f, e...)
+	default:
+		return f.Append("错误", e.Error())
+	}
 }
 
 func Failed(title, description string) Failures {

@@ -72,6 +72,24 @@ export namespace box {
 		    return a;
 		}
 	}
+	export class Module {
+	    id: string;
+	    kind: string;
+	    title: string;
+	    index: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Module(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.index = source["index"];
+	    }
+	}
 	export class Settings {
 	    game: string;
 	    steam: string;
@@ -86,6 +104,26 @@ export namespace box {
 	        this.game = source["game"];
 	        this.steam = source["steam"];
 	        this.mods = source["mods"];
+	    }
+	}
+	export class WorkshopModule {
+	    id: string;
+	    title: string;
+	    icon: string;
+	    synced: boolean;
+	    tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkshopModule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.synced = source["synced"];
+	        this.tags = source["tags"];
 	    }
 	}
 

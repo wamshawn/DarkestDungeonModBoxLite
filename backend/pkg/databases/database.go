@@ -168,11 +168,12 @@ func (db *Database) Get(key string, value any) (has bool, err error) {
 		return json.Unmarshal([]byte(val), value)
 	})
 	if err != nil {
-		if has = errors.Is(err, buntdb.ErrNotFound); has {
+		if errors.Is(err, buntdb.ErrNotFound) {
 			err = nil
 		}
 		return
 	}
+	has = true
 	return
 }
 
