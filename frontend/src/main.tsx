@@ -14,7 +14,7 @@ const container = document.getElementById('root')
 const root = createRoot(container!)
 
 root.render(
-    // <React.StrictMode>
+    <React.StrictMode>
         <DevSupport ComponentPreviews={ComponentPreviews}
                     useInitialHook={useInitial}
         >
@@ -24,5 +24,5 @@ root.render(
                 </App>
             </ConfigProvider>
         </DevSupport>
-    // </React.StrictMode>
+    </React.StrictMode>
 )
