@@ -1,7 +1,6 @@
 package box
 
 import (
-	"os"
 	"path/filepath"
 
 	"DarkestDungeonModBoxLite/backend/pkg/databases"
@@ -11,17 +10,15 @@ import (
 )
 
 type Settings struct {
-	Game  string `json:"game"`
-	Steam string `json:"steam"`
-	Mods  string `json:"mods"`
+	Game     string `json:"game"`
+	Workshop string `json:"workshop"`
 }
 
-func (settings *Settings) Workshop() string {
-	if settings.Steam == "" {
+func (settings *Settings) GameModDir() string {
+	if settings.Game == "" {
 		return ""
 	}
-	workshop := filepath.Join(settings.Steam, "steamapps", "workshop", "content", "262060")
-	return workshop
+	return filepath.Join(settings.Game, "mods")
 }
 
 const (
@@ -39,36 +36,18 @@ func (bx *Box) Settings() (v Settings, err error) {
 		err = failure.Failed("获取设置失败", err.Error())
 		return
 	}
-	if v.Game == "" && v.Steam == "" {
-		changed := 0
+	if v.Game == "" && v.Workshop == "" {
 		game, steam, ok := getGameFromSteam()
 		if ok {
 			v.Game = game
-			v.Steam = steam
-			changed++
-		}
-		if v.Mods == "" {
-			if !files.InDesktop() {
-				wd, _ := os.Getwd()
-				if wd != "" {
-					v.Mods = filepath.Join(wd, "mods")
-					if exist, _ := files.Exist(v.Mods); !exist {
-						if err := files.Mkdir(v.Mods); err != nil {
-							v.Mods = ""
-						}
-					}
-					changed++
-				}
-			}
-		}
-		if changed > 0 {
-			_ = bx.SetSettings(v)
+			v.Workshop = filepath.Join(steam, "steamapps", "workshop", "content", "262060")
+			_ = bx.UpdateSettings(v)
 		}
 	}
 	return
 }
 
-func (bx *Box) SetSettings(v Settings) (err error) {
+func (bx *Box) UpdateSettings(v Settings) (err error) {
 	var (
 		db *databases.Database
 	)

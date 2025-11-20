@@ -8,7 +8,12 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
+	"time"
 
+	"DarkestDungeonModBoxLite/backend/pkg/images"
+
+	"github.com/cespare/xxhash/v2"
 	"github.com/rs/xid"
 	"github.com/tidwall/buntdb"
 )
@@ -309,6 +314,46 @@ func (db *Database) Range(index string, beg uint, end uint, values any) (err err
 		return
 	}
 	err = json.Unmarshal(buf.Bytes(), &values)
+	return
+}
+
+func (db *Database) GetImage(filename string) (v string, err error) {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		err = errors.New("filename is empty")
+		return
+	}
+	tx, txErr := db.kv.Begin(true)
+	if txErr != nil {
+		err = txErr
+		return
+	}
+	id := xxhash.Sum64String(filename)
+	key := fmt.Sprintf("images:%s", strconv.FormatUint(id, 16))
+
+	v, err = tx.Get(key)
+	if err != nil && !errors.Is(err, buntdb.ErrNotFound) {
+		_ = tx.Rollback()
+		return
+	}
+	if v != "" {
+		_ = tx.Rollback()
+		return
+	}
+	v, err = images.Encode(filename)
+	if err != nil {
+		_ = tx.Rollback()
+		return
+	}
+	_, _, setErr := tx.Set(key, v, &buntdb.SetOptions{
+		Expires: true,
+		TTL:     15 * 24 * time.Hour,
+	})
+	if setErr != nil {
+		_ = tx.Rollback()
+		return
+	}
+	_ = tx.Commit()
 	return
 }
 

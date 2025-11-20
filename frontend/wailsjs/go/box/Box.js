@@ -6,12 +6,16 @@ export function CancelImportMod(arg1) {
   return window['go']['box']['Box']['CancelImportMod'](arg1);
 }
 
+export function GetImage(arg1) {
+  return window['go']['box']['Box']['GetImage'](arg1);
+}
+
 export function ImportMod() {
   return window['go']['box']['Box']['ImportMod']();
 }
 
-export function ListModules() {
-  return window['go']['box']['Box']['ListModules']();
+export function ListWorkshopModules() {
+  return window['go']['box']['Box']['ListWorkshopModules']();
 }
 
 export function Module(arg1) {
@@ -22,10 +26,6 @@ export function Open() {
   return window['go']['box']['Box']['Open']();
 }
 
-export function SetSettings(arg1) {
-  return window['go']['box']['Box']['SetSettings'](arg1);
-}
-
 export function Settings() {
   return window['go']['box']['Box']['Settings']();
 }
@@ -34,10 +34,14 @@ export function StartImportMod(arg1) {
   return window['go']['box']['Box']['StartImportMod'](arg1);
 }
 
-export function StopSyncSteamMods(arg1) {
-  return window['go']['box']['Box']['StopSyncSteamMods'](arg1);
+export function StopSyncWorkshopMods(arg1) {
+  return window['go']['box']['Box']['StopSyncWorkshopMods'](arg1);
 }
 
-export function SyncSteamMods() {
-  return window['go']['box']['Box']['SyncSteamMods']();
+export function SyncWorkshopMods() {
+  return window['go']['box']['Box']['SyncWorkshopMods']();
+}
+
+export function UpdateSettings(arg1) {
+  return window['go']['box']['Box']['UpdateSettings'](arg1);
 }

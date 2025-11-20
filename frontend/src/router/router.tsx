@@ -4,7 +4,7 @@ import Modules from "../Application/Modules";
 import Settings from "../Application/Settings";
 import Application from "../Application";
 import ErrorBoundary from "../Application/ErrorBoundary";
-import Steam from "../Application/Steam";
+import Workshop from "../Application/Workshop";
 
 
 const router = createHashRouter([
@@ -22,8 +22,8 @@ const router = createHashRouter([
                 element: <Modules/>
             },
             {
-                path: "steam",
-                element: <Steam/>
+                path: "workshop",
+                element: <Workshop/>
             },
             {
                 path: "settings",

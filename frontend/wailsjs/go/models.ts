@@ -92,8 +92,7 @@ export namespace box {
 	}
 	export class Settings {
 	    game: string;
-	    steam: string;
-	    mods: string;
+	    workshop: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -102,8 +101,7 @@ export namespace box {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.game = source["game"];
-	        this.steam = source["steam"];
-	        this.mods = source["mods"];
+	        this.workshop = source["workshop"];
 	    }
 	}
 	export class WorkshopModule {

@@ -2,40 +2,98 @@ package box
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 
 	"DarkestDungeonModBoxLite/backend/pkg/databases"
 	"DarkestDungeonModBoxLite/backend/pkg/failure"
+	"DarkestDungeonModBoxLite/backend/pkg/files"
 	"DarkestDungeonModBoxLite/backend/pkg/tasks"
 )
 
-func New() *Box {
-	return &Box{
-		ctx:     nil,
-		cancel:  nil,
-		manager: nil,
-		db:      nil,
-	}
-}
-
 type Box struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	manager *tasks.Manager
-	db      *databases.Database
+	ctx      context.Context
+	cancel   context.CancelFunc
+	manager  *tasks.Manager
+	db       *databases.Database
+	tempFS   *files.DirFS
+	moduleFS *files.DirFS
+	err      error
 }
 
 func (bx *Box) startup(ctx context.Context) {
-	bx.ctx, bx.cancel = context.WithCancel(ctx)
+	// desktop
+	if files.InDesktop() {
+		bx.err = failure.Failed("错误", "不能在桌面运行")
+		return
+	}
+	// work
+	wd, wdErr := os.Getwd()
+	if wdErr != nil {
+		bx.err = failure.Failed("错误", "无法获取当前运行位置").Wrap(wdErr)
+		return
+	}
+
+	// mods
+	moduleDirPath := filepath.Join(wd, "mods")
+	if exist, _ := files.Exist(moduleDirPath); !exist {
+		if err := files.Mkdir(moduleDirPath); err != nil {
+			bx.err = failure.Failed("错误", "无法创建目录").Append("位置", moduleDirPath).Wrap(err)
+			return
+		}
+	}
+	module, moduleErr := files.NewDirFS(moduleDirPath)
+	if moduleErr != nil {
+		bx.err = failure.Failed("错误", "无法加载模组目录").Append("位置", moduleDirPath).Wrap(moduleErr)
+		return
+	}
+	bx.moduleFS = module
+
+	// temp
+	tempDirPath := filepath.Join(moduleDirPath, ".tmp")
+	if exist, _ := files.Exist(tempDirPath); !exist {
+		if err := files.Mkdir(tempDirPath); err != nil {
+			bx.err = failure.Failed("错误", "无法创建目录").Append("位置", tempDirPath).Wrap(err)
+			return
+		}
+	}
+	temp, tempErr := files.NewDirFS(tempDirPath)
+	if tempErr != nil {
+		bx.err = failure.Failed("错误", "无法加载零时目录").Append("位置", tempDirPath).Wrap(tempErr)
+		return
+	}
+	bx.tempFS = temp
+
+	// tasks
 	bx.manager = tasks.New()
+
+	// database
+	databaseDirPath := filepath.Join(wd, "database")
+	if exist, _ := files.Exist(databaseDirPath); !exist {
+		if err := files.Mkdir(databaseDirPath); err != nil {
+			bx.err = failure.Failed("错误", "无法创建目录").Append("位置", databaseDirPath).Wrap(err)
+			return
+		}
+	}
+	db, dbErr := databases.New(filepath.Join(databaseDirPath, "database.db"), indexes()...)
+	if dbErr != nil {
+		bx.err = failure.Failed("错误", "无法打开数据库").Wrap(dbErr)
+		return
+	}
+	bx.db = db
+
+	// ctx
+	bx.ctx, bx.cancel = context.WithCancel(ctx)
 	return
 }
 
 func (bx *Box) shutdown(_ context.Context) {
-	bx.cancel()
-	bx.closeDB()
-	if bx.manager != nil {
-		bx.manager.Shutdown()
+	if bx.err != nil {
+		return
 	}
+	bx.cancel()
+	bx.db.Close()
+	bx.manager.Shutdown()
 	return
 }
 

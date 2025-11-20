@@ -4,20 +4,22 @@ import {box} from '../models';
 
 export function CancelImportMod(arg1:string):Promise<void>;
 
+export function GetImage(arg1:string):Promise<string>;
+
 export function ImportMod():Promise<box.ImportMod>;
 
-export function ListModules():Promise<Array<box.WorkshopModule>>;
+export function ListWorkshopModules():Promise<Array<box.WorkshopModule>>;
 
 export function Module(arg1:string):Promise<box.Module>;
 
 export function Open():Promise<box.Settings>;
 
-export function SetSettings(arg1:box.Settings):Promise<void>;
-
 export function Settings():Promise<box.Settings>;
 
 export function StartImportMod(arg1:box.ImportMod):Promise<string>;
 
-export function StopSyncSteamMods(arg1:string):Promise<void>;
+export function StopSyncWorkshopMods(arg1:string):Promise<void>;
 
-export function SyncSteamMods():Promise<string>;
+export function SyncWorkshopMods():Promise<string>;
+
+export function UpdateSettings(arg1:box.Settings):Promise<void>;

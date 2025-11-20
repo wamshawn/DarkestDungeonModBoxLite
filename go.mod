@@ -3,6 +3,7 @@ module DarkestDungeonModBoxLite
 go 1.23
 
 require (
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/google/uuid v1.6.0
 	github.com/rs/xid v1.6.0
 	github.com/tidwall/buntdb v1.3.2

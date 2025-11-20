@@ -37,7 +37,7 @@ function getItem(
 const items: MenuItem[] = [
     getItem('方案', 'plans', <ReconciliationOutlined />),
     getItem('模组', 'modules', <AppstoreAddOutlined />),
-    getItem('工坊', 'steam', <GiftOutlined />),
+    getItem('工坊', 'workshop', <GiftOutlined />),
     getItem('设置', 'settings', <SettingOutlined/>),
 ];
 
@@ -74,7 +74,7 @@ const Index: React.FC = () => {
         }
         // WindowMaximise();
         const settings = r.value()
-        if (settings.mods == "" || settings.game == "") {
+        if (settings.game == "") {
             state.menuKey = 'settings';
             navigate('settings');
             return;
@@ -108,9 +108,9 @@ const Index: React.FC = () => {
                         } else if (key === "modules") {
                             state.menuKey = 'modules';
                             navigate("modules")
-                        } else if (key === "steam") {
-                            state.menuKey = 'steam';
-                            navigate("steam")
+                        } else if (key === "workshop") {
+                            state.menuKey = 'workshop';
+                            navigate("workshop")
                         } else if (key === "settings") {
                             state.menuKey = 'settings';
                             navigate("settings")
