@@ -194,14 +194,12 @@ func WalkArchiveInfo(ctx context.Context, filename string, password string) (arc
 		}
 		b := make([]byte, 64)
 		rn, rErr := item.Read(b)
-
 		if rn == 0 && rErr != nil {
-			if errors.Is(rErr, io.EOF) {
-
+			if !errors.Is(rErr, io.EOF) {
+				_ = item.Close()
+				err = rErr
+				return
 			}
-			_ = item.Close()
-			err = rErr
-			return
 		}
 		_ = item.Close()
 		archive.Mount(info.NameInArchive, false)
