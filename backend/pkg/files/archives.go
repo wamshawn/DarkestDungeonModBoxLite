@@ -63,6 +63,25 @@ func (info *ArchiveFileInfo) Find(name string) (targets []*ArchiveFileInfo) {
 	return
 }
 
+func (info *ArchiveFileInfo) Path() string {
+	if info.Name == "" {
+		return ""
+	}
+	items := []string{info.Name}
+	parent := info.Parent
+LOOP:
+	if parent != nil {
+		items = append(items, parent.Name)
+		parent = parent.Parent
+		goto LOOP
+	}
+	s := ""
+	for i := len(items) - 1; i > -1; i-- {
+		s = s + "/" + items[i]
+	}
+	return s[1:]
+}
+
 type ArchiveInfo struct {
 	MediaType string
 	Extension string

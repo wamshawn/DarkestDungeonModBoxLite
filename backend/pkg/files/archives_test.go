@@ -19,7 +19,7 @@ func TestWalkArchiveInfo(t *testing.T) {
 	t.Log(len(targets))
 	if len(targets) > 0 {
 		for _, target := range targets {
-			t.Log(target.Name, target.Parent.Name)
+			t.Log(target.Name, target.Parent.Name, target.Path())
 		}
 	}
 }
