@@ -3,10 +3,15 @@ package files_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"DarkestDungeonModBoxLite/backend/pkg/files"
 )
+
+func TestDir(t *testing.T) {
+	t.Log(filepath.Join("", "foo.txt"))
+}
 
 func TestGetArchiveInfo(t *testing.T) {
 	ctx := context.Background()
@@ -14,13 +19,7 @@ func TestGetArchiveInfo(t *testing.T) {
 	filename := `F:\games\暗黑地牢\test.zip`
 	//filename := `F:\games\暗黑地牢\test_inner\test_inner.7z`
 	//filename := `F:\games\暗黑地牢\test\ZIMIK Arbalest skin.7z`
-	file, openErr := os.Open(filename)
-	if openErr != nil {
-		t.Error(openErr)
-		return
-	}
-	defer file.Close()
-	info, err := files.GetArchiveInfo(ctx, filename, file, "111")
+	info, err := files.GetArchiveInfo(ctx, filename, "111")
 	if err != nil {
 		t.Error(err)
 		return

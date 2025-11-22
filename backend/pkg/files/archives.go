@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -228,7 +229,40 @@ func (info *ArchiveInfo) splitDirs(name string) (dirs []string) {
 	return
 }
 
-func GetArchiveInfo(ctx context.Context, filename string, reader io.Reader, password string) (archive *ArchiveInfo, err error) {
+type ctxArchivePasswordKey struct {
+}
+
+var (
+	_ctxArchivePasswordKey = ctxArchivePasswordKey{}
+)
+
+func GetArchiveInfo(ctx context.Context, filename string, password string) (archive *ArchiveInfo, err error) {
+	file, openErr := os.Open(filename)
+	if openErr != nil {
+		err = openErr
+		return
+	}
+	if password != "" {
+		ctx = context.WithValue(ctx, _ctxArchivePasswordKey, password)
+	}
+	archive, err = getArchiveInfo(ctx, filename, file, false)
+	_ = file.Close()
+	if err != nil {
+		if password != "" {
+			file, _ = os.Open(filename)
+			archive, err = getArchiveInfo(ctx, filename, file, true)
+			_ = file.Close()
+			return
+		}
+		return
+	}
+	return
+}
+
+func getArchiveInfo(ctx context.Context, filename string, reader io.Reader, password bool) (archive *ArchiveInfo, err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
 	// identify
 	format, _, identifyErr := archives.Identify(ctx, filename, reader)
 	if identifyErr != nil {
@@ -241,20 +275,26 @@ func GetArchiveInfo(ctx context.Context, filename string, reader io.Reader, pass
 		err = fmt.Errorf("%s is not supported", format.Extension())
 		return
 	}
-	if password != "" {
+	if password {
+		pwd0 := ctx.Value(_ctxArchivePasswordKey)
+		if pwd0 == nil {
+			err = errors.New("no archive password in context")
+			return
+		}
+		pwd := pwd0.(string)
 		switch format.Extension() {
 		case ".zip":
 			extractor = CryptoZip{
 				Zip:      extractor.(archives.Zip),
-				Password: password,
+				Password: pwd,
 			}
 		case ".7z":
 			ex := extractor.(archives.SevenZip)
-			ex.Password = password
+			ex.Password = pwd
 			extractor = ex
 		case ".rar":
 			ex := extractor.(archives.Rar)
-			ex.Password = password
+			ex.Password = pwd
 			extractor = ex
 		default:
 			err = fmt.Errorf("%s is not supported", filename)
@@ -269,6 +309,9 @@ func GetArchiveInfo(ctx context.Context, filename string, reader io.Reader, pass
 	}
 
 	err = extractor.Extract(ctx, reader, func(ctx context.Context, info archives.FileInfo) (err error) {
+		if err = ctx.Err(); err != nil {
+			return
+		}
 		if info.IsDir() {
 			archive.Mount(info.NameInArchive, true)
 			return
@@ -335,7 +378,6 @@ func GetArchiveInfo(ctx context.Context, filename string, reader io.Reader, pass
 			}
 		}
 		defer tmp.Remove()
-		var subPassword string
 		if tmpFile == nil {
 			cpErr := tmp.Copy(info.Name(), itemReader)
 			if cpErr != nil {
@@ -346,25 +388,21 @@ func GetArchiveInfo(ctx context.Context, filename string, reader io.Reader, pass
 				return
 			}
 		}
+		needPassword := false
 	SUB:
-		sub, subErr := GetArchiveInfo(ctx, info.Name(), tmpFile, subPassword)
+		sub, subErr := getArchiveInfo(ctx, info.Name(), tmpFile, needPassword)
 		_ = tmpFile.Close()
 		if subErr != nil {
-			if password == "" {
+			if needPassword {
 				err = subErr
 				return
 			}
-			if subPassword == "" {
-				subPassword = password
-				tmpFile, err = tmp.OpenFile(info.Name())
-				if err != nil {
-					return
-				}
-				goto SUB
-			} else {
-				err = subErr
+			tmpFile, err = tmp.OpenFile(info.Name())
+			if err != nil {
 				return
 			}
+			needPassword = true
+			goto SUB
 		}
 		archive.Merge(info.NameInArchive, sub)
 		return
@@ -372,15 +410,194 @@ func GetArchiveInfo(ctx context.Context, filename string, reader io.Reader, pass
 	return
 }
 
-type ExtractArchiveHandler func(ctx context.Context, filename string) (dstFilepath string, err error)
+type ExtractArchiveHandler func(ctx context.Context, filename string, archived bool) (dst string, extract bool, err error)
 
-func ExtractArchive(ctx context.Context, filename string, reader io.Reader, password string, handler ExtractArchiveHandler) (err error) {
-	err = extractArchive(ctx, "", filename, reader, password, handler)
+func ExtractArchive(ctx context.Context, dstDir string, filename string, password string, handler ExtractArchiveHandler) (err error) {
+	exist, existErr := Exist(dstDir)
+	if existErr != nil {
+		err = existErr
+		return
+	}
+	if exist {
+		err = errors.New("dst dir exists")
+		return
+	}
+	if err = Mkdir(dstDir); err != nil {
+		return
+	}
+
+	file, openErr := os.Open(filename)
+	if openErr != nil {
+		_ = os.RemoveAll(dstDir)
+		err = openErr
+		return
+	}
+	if password != "" {
+		ctx = context.WithValue(ctx, _ctxArchivePasswordKey, password)
+	}
+	err = extractArchive(ctx, "", dstDir, filename, file, false, handler)
+	_ = file.Close()
+	if err != nil {
+		if password != "" {
+			file, _ = os.Open(filename)
+			err = extractArchive(ctx, "", dstDir, filename, file, false, handler)
+			if err != nil {
+				_ = os.RemoveAll(dstDir)
+			}
+			_ = file.Close()
+			return
+		}
+		_ = os.RemoveAll(dstDir)
+		return
+	}
 	return
 }
 
-func extractArchive(ctx context.Context, prefix string, filename string, reader io.Reader, password string, handler ExtractArchiveHandler) (err error) {
+func extractArchive(ctx context.Context, prefix string, dstDir string, filename string, reader io.Reader, password bool, handler ExtractArchiveHandler) (err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
+	// identify
+	format, _, identifyErr := archives.Identify(ctx, filename, reader)
+	if identifyErr != nil {
+		err = identifyErr
+		return
+	}
+	// extractor
+	extractor, ok := format.(archives.Extractor)
+	if !ok {
+		err = fmt.Errorf("%s is not supported", format.Extension())
+		return
+	}
+	if password {
+		pwd0 := ctx.Value(_ctxArchivePasswordKey)
+		if pwd0 == nil {
+			err = errors.New("no archive password in context")
+			return
+		}
+		pwd := pwd0.(string)
+		switch format.Extension() {
+		case ".zip":
+			extractor = CryptoZip{
+				Zip:      extractor.(archives.Zip),
+				Password: pwd,
+			}
+		case ".7z":
+			ex := extractor.(archives.SevenZip)
+			ex.Password = pwd
+			extractor = ex
+		case ".rar":
+			ex := extractor.(archives.Rar)
+			ex.Password = pwd
+			extractor = ex
+		default:
+			err = fmt.Errorf("%s is not supported", filename)
+			return
+		}
+	}
 
+	err = extractor.Extract(ctx, reader, func(ctx context.Context, info archives.FileInfo) (err error) {
+		if err = ctx.Err(); err != nil {
+			return
+		}
+		target := filepath.Join(prefix, info.NameInArchive)
+		if info.IsDir() {
+			dst, _, hErr := handler(ctx, target, false)
+			if hErr != nil {
+				err = hErr
+				return
+			}
+			if dst != "" {
+				dst = filepath.Join(dstDir, dst)
+				exist, existErr := Exist(dst)
+				if existErr != nil {
+					err = existErr
+					return
+				}
+				if !exist {
+					if err = Mkdir(dst); err != nil {
+						return
+					}
+				}
+			}
+			return
+		}
+		item, itemErr := info.Open()
+		if itemErr != nil {
+			err = itemErr
+			return
+		}
+		defer item.Close()
+
+		var itemReader io.Reader = item
+		var tmp *TempDir
+		var tmpFile *os.File
+		ext := filepath.Ext(info.Name())
+		archived := false
+		switch strings.ToLower(ext) {
+		case ".zip", ".7z", ".rar":
+			archived = true
+			break
+		default:
+			if info.Size() < 64*1024*1024 {
+				b, bErr := io.ReadAll(itemReader)
+				if bErr != nil {
+					err = bErr
+					return
+				}
+				itemReader = bytes.NewReader(b)
+				_, archived = IsArchiveFile(bytes.NewReader(b))
+				break
+			}
+			tmp, err = CreateTempDir("archives_*")
+			if err != nil {
+				return
+			}
+			cpErr := tmp.Copy(info.Name(), itemReader)
+			if cpErr != nil {
+				_ = tmp.Remove()
+				err = cpErr
+				return
+			}
+			tmpFile, err = tmp.OpenFile(info.Name())
+			if err != nil {
+				return
+			}
+			_, archived = IsArchiveFile(tmpFile)
+			_, _ = tmpFile.Seek(0, io.SeekStart)
+			itemReader = tmpFile
+			break
+		}
+		if !archived {
+			if tmp != nil {
+				defer tmp.Remove()
+			}
+			if tmpFile != nil {
+				defer tmpFile.Close()
+			}
+			dst, _, hErr := handler(ctx, target, false)
+			if hErr != nil {
+				err = hErr
+				return
+			}
+			dstFile, dstErr := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+			if dstErr != nil {
+				err = dstErr
+				return
+			}
+			defer dstFile.Close()
+
+			_, cpErr := io.Copy(dstFile, itemReader)
+			if cpErr != nil {
+				err = cpErr
+				return
+			}
+			return
+		}
+		// todo
+
+		return
+	})
 	return
 }
 
