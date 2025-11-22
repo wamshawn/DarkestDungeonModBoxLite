@@ -372,6 +372,18 @@ func GetArchiveInfo(ctx context.Context, filename string, reader io.Reader, pass
 	return
 }
 
+type ExtractArchiveHandler func(ctx context.Context, filename string) (dstFilepath string, err error)
+
+func ExtractArchive(ctx context.Context, filename string, reader io.Reader, password string, handler ExtractArchiveHandler) (err error) {
+	err = extractArchive(ctx, "", filename, reader, password, handler)
+	return
+}
+
+func extractArchive(ctx context.Context, prefix string, filename string, reader io.Reader, password string, handler ExtractArchiveHandler) (err error) {
+
+	return
+}
+
 var (
 	compressionFormats = []struct {
 		magic  string
