@@ -19,7 +19,7 @@ func TestGetArchiveInfo(t *testing.T) {
 	filename := `F:\games\暗黑地牢\test.zip`
 	//filename := `F:\games\暗黑地牢\test_inner\test_inner.7z`
 	//filename := `F:\games\暗黑地牢\test\ZIMIK Arbalest skin.7z`
-	info, err := files.GetArchiveInfo(ctx, filename, "111")
+	info, err := files.GetArchiveInfo(ctx, filename, files.ArchivePassword("111"))
 	if err != nil {
 		t.Error(err)
 		return

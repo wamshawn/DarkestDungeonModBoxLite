@@ -48,7 +48,7 @@ func (z CryptoZip) Extract(ctx context.Context, archive io.Reader, handleFile ar
 			continue
 		}
 
-		if z.Password != "" {
+		if z.Password != "" && f.IsEncrypted() {
 			f.SetPassword(z.Password)
 		}
 		info := f.FileInfo()

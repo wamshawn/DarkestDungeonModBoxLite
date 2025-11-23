@@ -98,6 +98,17 @@ func (tf *TempDir) WriteFile(name string, b []byte) error {
 	return os.WriteFile(s, b, 0644)
 }
 
+func (tf *TempDir) AppendFile(name string, src io.Reader) error {
+	s := filepath.Join(tf.root, name)
+	dst, dstErr := os.OpenFile(s, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if dstErr != nil {
+		return dstErr
+	}
+	defer dst.Close()
+	_, writeErr := io.Copy(dst, src)
+	return writeErr
+}
+
 func (tf *TempDir) Copy(name string, src io.Reader) error {
 	s := filepath.Join(tf.root, name)
 	dst, dstErr := os.OpenFile(s, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
