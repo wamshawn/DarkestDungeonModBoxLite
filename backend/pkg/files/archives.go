@@ -16,13 +16,13 @@ import (
 )
 
 type ArchiveFileInfo struct {
-	Name             string
-	IsDir            bool
-	Archived         bool
-	Password         string
-	PasswordRequired bool
-	Children         []*ArchiveFileInfo
-	Parent           *ArchiveFileInfo `json:"-"`
+	Name             string             `json:"name"`
+	IsDir            bool               `json:"isDir"`
+	Archived         bool               `json:"archived"`
+	Password         string             `json:"password"`
+	PasswordRequired bool               `json:"passwordRequired"`
+	Children         []*ArchiveFileInfo `json:"children"`
+	Parent           *ArchiveFileInfo   `json:"-"`
 }
 
 func (info *ArchiveFileInfo) add(dirs []string, file string) (result *ArchiveFileInfo) {
