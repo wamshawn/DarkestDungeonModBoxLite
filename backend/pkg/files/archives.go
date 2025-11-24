@@ -15,93 +15,34 @@ import (
 	"github.com/mholt/archives"
 )
 
-func ArchivePassword(password string) *ArchivePasswords {
-	return &ArchivePasswords{
-		password: password,
-	}
-}
-
-type ArchivePasswords struct {
-	password  string
-	passwords map[string]string
-}
-
-func (options *ArchivePasswords) AddPassword(filename string, password string) {
-	options.passwords[filename] = password
-}
-
-func (options *ArchivePasswords) GetPassword(filename string) string {
-	if len(options.passwords) == 0 {
-		return ""
-	}
-	password, _ := options.passwords[filename]
-	return password
-}
-
-func (options *ArchivePasswords) Password() string {
-	return options.password
-}
-
-func (options *ArchivePasswords) Sub(filename string) *ArchivePasswords {
-	if len(options.passwords) == 0 {
-		return options
-	}
-	password := options.GetPassword(filename)
-	if password == "" {
-		return options
-	}
-	return &ArchivePasswords{
-		password:  password,
-		passwords: options.passwords,
-	}
-}
-
-type ctxArchivePasswordKey struct{}
-
-var (
-	_ctxArchivePasswordKey = ctxArchivePasswordKey{}
-)
-
-func getArchivePasswords(ctx context.Context) *ArchivePasswords {
-	v := ctx.Value(_ctxArchivePasswordKey)
-	if v != nil {
-		return v.(*ArchivePasswords)
-	}
-	return nil
-}
-
-func withArchivePassword(ctx context.Context, password *ArchivePasswords) context.Context {
-	if password != nil {
-		return context.WithValue(ctx, _ctxArchivePasswordKey, password)
-	}
-	return ctx
-}
-
 type ArchiveFileInfo struct {
-	Name     string
-	IsDir    bool
-	Archived bool
-	Children []*ArchiveFileInfo
-	Parent   *ArchiveFileInfo `json:"-"`
+	Name             string
+	IsDir            bool
+	Archived         bool
+	Password         string
+	PasswordRequired bool
+	Children         []*ArchiveFileInfo
+	Parent           *ArchiveFileInfo `json:"-"`
 }
 
-func (info *ArchiveFileInfo) Add(dirs []string, file string) {
+func (info *ArchiveFileInfo) add(dirs []string, file string) (result *ArchiveFileInfo) {
 	if len(dirs) == 0 {
 		if file == "" {
 			return
 		}
-		info.Children = append(info.Children, &ArchiveFileInfo{
+		result = &ArchiveFileInfo{
 			Name:     file,
 			IsDir:    false,
 			Children: nil,
 			Parent:   info,
-		})
+		}
+		info.Children = append(info.Children, result)
 		return
 	}
 	topDir := dirs[0]
 	for _, child := range info.Children {
 		if child.IsDir && child.Name == topDir {
-			child.Add(dirs[1:], file)
+			result = child.add(dirs[1:], file)
 			return
 		}
 	}
@@ -111,44 +52,53 @@ func (info *ArchiveFileInfo) Add(dirs []string, file string) {
 		Children: nil,
 		Parent:   info,
 	}
-	child.Add(dirs[1:], file)
 	info.Children = append(info.Children, child)
+	result = child.add(dirs[1:], file)
+	return
 }
 
-func (info *ArchiveFileInfo) Merge(archive string, dirs []string, targets []*ArchiveFileInfo) {
+func (info *ArchiveFileInfo) mountDir(filename string) (result *ArchiveFileInfo) {
+	dirs := splitDirs(filepath.Clean(filename))
+	result = info.add(dirs, "")
+	return
+}
+
+func (info *ArchiveFileInfo) mountFile(filename string) (result *ArchiveFileInfo) {
+	dir, file := filepath.Split(filepath.Clean(filename))
+	dirs := splitDirs(dir)
+	result = info.add(dirs, file)
+	return
+}
+
+func (info *ArchiveFileInfo) mountArchiveFile(filename string, child *ArchiveFileInfo) (result *ArchiveFileInfo) {
+	result = info.mountFile(filename)
+	result.Archived = true
+	result.Password = child.Password
+	result.PasswordRequired = child.PasswordRequired
+	result.Children = child.Children
+	for _, c := range result.Children {
+		c.Parent = result
+	}
+	return
+}
+
+func (info *ArchiveFileInfo) get(filename string) (target *ArchiveFileInfo) {
+	dir, file := filepath.Split(filepath.Clean(filename))
+	dirs := splitDirs(dir)
 	if len(dirs) == 0 {
-		if len(targets) == 0 {
-			return
+		for _, child := range info.Children {
+			if child.Name == file {
+				return child
+			}
 		}
-		archiveInfo := &ArchiveFileInfo{
-			Name:     archive,
-			IsDir:    false,
-			Archived: true,
-			Children: targets,
-			Parent:   info,
-		}
-		for _, child := range archiveInfo.Children {
-			child.Parent = archiveInfo
-		}
-		info.Children = append(info.Children, archiveInfo)
 		return
 	}
-	topDir := dirs[0]
 	for _, child := range info.Children {
-		if child.IsDir && child.Name == topDir {
-			child.Merge(archive, dirs[1:], targets)
-			return
+		if child.Name == dirs[0] {
+			return child.get(filepath.Join(filepath.Join(dirs[1:]...), file))
 		}
 	}
-	child := &ArchiveFileInfo{
-		Name:     topDir,
-		IsDir:    true,
-		Archived: false,
-		Children: nil,
-		Parent:   info,
-	}
-	child.Merge(archive, dirs[1:], targets)
-	info.Children = append(info.Children, child)
+	return
 }
 
 func (info *ArchiveFileInfo) Find(name string) (targets []*ArchiveFileInfo) {
@@ -165,137 +115,228 @@ func (info *ArchiveFileInfo) Find(name string) (targets []*ArchiveFileInfo) {
 	return
 }
 
+func (info *ArchiveFileInfo) Root() *ArchiveFileInfo {
+	parent := info.Parent
+LOOP:
+	if parent == nil {
+		return info
+	}
+	parent = parent.Parent
+	goto LOOP
+}
+
 func (info *ArchiveFileInfo) Path() string {
 	if info.Name == "" {
+		return ""
+	}
+	if info.Parent == nil {
 		return ""
 	}
 	items := []string{info.Name}
 	parent := info.Parent
 LOOP:
 	if parent != nil {
-		items = append(items, parent.Name)
+		if parent.Parent != nil {
+			items = append(items, parent.Name)
+		}
 		parent = parent.Parent
 		goto LOOP
 	}
 	s := ""
 	for i := len(items) - 1; i > -1; i-- {
-		s = s + "/" + items[i]
+		s = filepath.Join(s, items[i])
 	}
-	return s[1:]
+	return s
 }
 
-type ArchiveInfo struct {
-	MediaType string
-	Extension string
-	Entries   []*ArchiveFileInfo
-}
-
-func (info *ArchiveInfo) Mount(name string, isDir bool) {
-	dir := ""
-	file := ""
-	if !isDir {
-		dir, file = filepath.Split(name)
-		dir = filepath.Dir(dir)
-	} else {
-		dir = filepath.Dir(name)
+func (info *ArchiveFileInfo) ArchiveEntries() (entries []*ArchiveFileInfo) {
+	if info.Archived {
+		entries = append(entries, info)
 	}
-	dirs := info.splitDirs(dir)
-	if len(dirs) == 0 {
-		if isDir {
-			info.Entries = append(info.Entries, &ArchiveFileInfo{
-				Name:     dir,
-				IsDir:    true,
-				Children: nil,
-			})
-		} else {
-			info.Entries = append(info.Entries, &ArchiveFileInfo{
-				Name:     file,
-				IsDir:    false,
-				Children: nil,
-			})
-		}
-		return
-	}
-	topDir := dirs[0]
-	for _, entry := range info.Entries {
-		if entry.Name == topDir {
-			entry.Add(dirs[1:], file)
-			return
-		}
-	}
-	entry := &ArchiveFileInfo{
-		Name:     topDir,
-		IsDir:    true,
-		Children: nil,
-	}
-	entry.Add(dirs[1:], file)
-	info.Entries = append(info.Entries, entry)
-}
-
-func (info *ArchiveInfo) Merge(path string, target *ArchiveInfo) {
-	dir, filename := filepath.Split(path)
-	dir = filepath.Dir(dir)
-	dirs := info.splitDirs(dir)
-	if len(dirs) == 0 {
-		info.Entries = append(info.Entries, &ArchiveFileInfo{
-			Name:     filename,
-			IsDir:    false,
-			Archived: true,
-			Children: target.Entries,
-		})
-		return
-	}
-	topDir := dirs[0]
-	for _, entry := range info.Entries {
-		if entry.Name == topDir {
-			entry.Merge(filename, dirs[1:], target.Entries)
-			return
-		}
-	}
-	entry := &ArchiveFileInfo{
-		Name:     topDir,
-		IsDir:    true,
-		Children: nil,
-	}
-	entry.Merge(filename, dirs[1:], target.Entries)
-	info.Entries = append(info.Entries, entry)
-	return
-}
-
-func (info *ArchiveInfo) Find(name string) (targets []*ArchiveFileInfo) {
-	for _, entry := range info.Entries {
-		r := entry.Find(name)
-		if len(r) > 0 {
-			targets = append(targets, r...)
-		}
+	for _, child := range info.Children {
+		entries = append(entries, child.ArchiveEntries()...)
 	}
 	return
 }
 
-func (info *ArchiveInfo) String() string {
+func (info *ArchiveFileInfo) String() string {
 	b, _ := json.MarshalIndent(info, "", "\t")
 	return string(b)
 }
 
-func (info *ArchiveInfo) splitDirs(name string) (dirs []string) {
-	name = filepath.Clean(name)
-	if name == "" || name == "." {
+func ArchiveFile(filename string) *ArchiveExtractOptions {
+	return &ArchiveExtractOptions{
+		filename: filepath.Clean(filename),
+		password: "",
+		discard:  false,
+		parent:   nil,
+		children: nil,
+	}
+}
+
+type ArchiveExtractOptions struct {
+	filename string
+	password string
+	discard  bool
+	parent   *ArchiveExtractOptions
+	children []*ArchiveExtractOptions
+}
+
+func (options *ArchiveExtractOptions) SetPassword(password string) *ArchiveExtractOptions {
+	options.password = password
+	return options
+}
+
+func (options *ArchiveExtractOptions) SetEntryPassword(filename string, password string) *ArchiveExtractOptions {
+	options.update(filename, password, false)
+	return options
+}
+
+func (options *ArchiveExtractOptions) DiscardEntry(filename string) *ArchiveExtractOptions {
+	options.update(filename, "", true)
+	return options
+}
+
+func (options *ArchiveExtractOptions) Password(filename string) string {
+	if filename == "" {
+		return options.password
+	}
+	target := options.find(filename)
+	if target == nil {
+		return options.password
+	}
+	if target.password == "" {
+	PARENT:
+		if target.parent == nil {
+			return ""
+		}
+		if target.parent.password == "" {
+			goto PARENT
+		}
+		return target.parent.password
+	}
+	return target.password
+}
+
+func (options *ArchiveExtractOptions) IsDiscardEntry(filename string) bool {
+	filename = filepath.Clean(filename)
+	if filename == "" || filename == "." {
+		return false
+	}
+	target := options.find(filename)
+	if target == nil {
+		dir := filepath.Dir(filepath.Clean(filename))
+		return options.IsDiscardEntry(dir)
+	}
+	if target.discard {
+		return true
+	}
+	parent := target.parent
+LOOP:
+	if parent == nil {
+		return false
+	}
+	if parent.discard {
+		return true
+	}
+	parent = parent.parent
+	goto LOOP
+}
+
+func (options *ArchiveExtractOptions) find(filename string) *ArchiveExtractOptions {
+	filename = filepath.Clean(filename)
+	if filename == "." {
+		return nil
+	}
+	if filename == options.filename {
+		return options
+	}
+	dir, file := filepath.Split(filename)
+	dirs := splitDirs(dir)
+	if len(dirs) == 0 {
+		for _, child := range options.children {
+			if child.filename == file {
+				return child
+			}
+		}
+		return nil
+	}
+	for _, child := range options.children {
+		if child.filename == dirs[0] {
+			return child.find(filepath.Join(filepath.Join(dirs[1:]...), file))
+		}
+	}
+	return nil
+}
+
+func (options *ArchiveExtractOptions) update(filename string, password string, discard bool) (ok bool) {
+	filename = filepath.Clean(filename)
+	if filename == "." {
 		return
 	}
-	dir, file := filepath.Split(name)
-	if dir != "" {
-		dir = filepath.Dir(dir)
-		dirs = info.splitDirs(dir)
+	dir, file := filepath.Split(filename)
+	dirs := splitDirs(dir)
+	if len(dirs) == 0 {
+		for _, child := range options.children {
+			if child.filename == file {
+				child.password = password
+				child.discard = discard
+				ok = true
+				return
+			}
+		}
+		child := &ArchiveExtractOptions{
+			filename: file,
+			password: password,
+			discard:  discard,
+			parent:   options,
+			children: nil,
+		}
+		options.children = append(options.children, child)
+		ok = true
+		return
 	}
-	dirs = append(dirs, file)
+	if len(options.children) == 0 {
+		child := &ArchiveExtractOptions{
+			filename: dirs[0],
+			password: "",
+			discard:  false,
+			parent:   options,
+			children: nil,
+		}
+		if ok = child.update(filepath.Join(filepath.Join(dirs[1:]...), file), password, discard); ok {
+			options.children = append(options.children, child)
+		}
+		return
+	}
+	for _, child := range options.children {
+		if child.filename == dirs[0] {
+			ok = child.update(filepath.Join(filepath.Join(dirs[1:]...), file), password, discard)
+			return
+		}
+	}
 	return
 }
 
-func GetArchiveInfo(ctx context.Context, filename string, passwords *ArchivePasswords) (archive *ArchiveInfo, err error) {
+var (
+	ErrArchiveFileRequirePassword = errors.New("archive file require password")
+	ErrArchiveFileInvalidPassword = errors.New("invalid archive file password")
+)
+
+func GetArchiveInfo(ctx context.Context, options *ArchiveExtractOptions) (info *ArchiveFileInfo, err error) {
+	if options == nil {
+		err = errors.Join(errors.New("failed to get archive info"), errors.New("options is nil"))
+		return
+	}
+	filename := filepath.Clean(strings.TrimSpace(options.filename))
+	if filename == "" || filename == "." {
+		err = errors.Join(errors.New("failed to get archive info"), errors.New("filename is missing"))
+		return
+	}
 	// open
 	file, openErr := os.Open(filename)
 	if openErr != nil {
-		err = errors.Join(errors.New("failed to get archive info"), openErr)
+		err = errors.Join(errors.New("failed to get archive info"), fmt.Errorf("failed to open %s", filename), openErr)
 		return
 	}
 	// validate
@@ -307,7 +348,7 @@ func GetArchiveInfo(ctx context.Context, filename string, passwords *ArchivePass
 	}
 	// get info
 	file, _ = os.Open(filename)
-	archive, err = getArchiveInfo(ctx, filename, file, passwords)
+	info, err = getArchiveFileInfo(ctx, "", filename, file, options)
 	_ = file.Close()
 	if err != nil {
 		err = errors.Join(errors.New("failed to get archive info"), err)
@@ -321,32 +362,53 @@ type ReadAtSeeker interface {
 	io.ReaderAt
 }
 
-func getArchiveInfo(ctx context.Context, filename string, file ReadAtSeeker, passwords *ArchivePasswords) (archive *ArchiveInfo, err error) {
+func getArchiveFileInfo(ctx context.Context, host string, filename string, file ReadAtSeeker, options *ArchiveExtractOptions) (archiveFileInfo *ArchiveFileInfo, err error) {
+	archiveName := filepath.Clean(filename)
+	if host != "" {
+		archiveName = filepath.Clean(filepath.Join(filepath.Clean(filepath.Dir(host)), filename))
+	}
+	archiveFileInfo = &ArchiveFileInfo{
+		Name:             archiveName,
+		IsDir:            false,
+		Archived:         true,
+		Password:         "",
+		PasswordRequired: false,
+		Children:         nil,
+		Parent:           nil,
+	}
 	// get extractor
-	extractor, mime, ext, extractorErr := getArchiveExtractor(ctx, filename, file, passwords)
+	extractor, password, passwordRequired, extractorErr := getArchiveExtractor(ctx, host, filename, file, options)
+	archiveFileInfo.Password = password
+	archiveFileInfo.PasswordRequired = passwordRequired
 	if extractorErr != nil {
+		if passwordRequired {
+			if password == "" {
+				extractorErr = errors.Join(ErrArchiveFileRequirePassword, extractorErr)
+			} else {
+				extractorErr = errors.Join(ErrArchiveFileInvalidPassword, extractorErr)
+			}
+		}
 		err = errors.Join(errors.New("failed to get archive info"), errors.New("failed to get archive extractor"), extractorErr)
 		return
 	}
 
-	// ctx
-	ctx = withArchivePassword(ctx, passwords)
-
-	// walk
-	archive = &ArchiveInfo{
-		MediaType: mime,
-		Extension: ext,
-		Entries:   nil,
-	}
-
+	// extract
 	err = extractor.Extract(ctx, file, func(ctx context.Context, info archives.FileInfo) (err error) {
 		// check ctx
 		if err = ctx.Err(); err != nil {
 			return
 		}
+		// discard
+		fileInfoPath := filepath.Clean(info.NameInArchive)
+		if host != "" {
+			fileInfoPath = filepath.Clean(filepath.Join(filepath.Clean(host), info.NameInArchive))
+		}
+		if options.IsDiscardEntry(fileInfoPath) {
+			return
+		}
 		// mount dir
 		if info.IsDir() {
-			archive.Mount(info.NameInArchive, true)
+			archiveFileInfo.mountDir(info.NameInArchive)
 			return
 		}
 		// file
@@ -372,18 +434,15 @@ func getArchiveInfo(ctx context.Context, filename string, file ReadAtSeeker, pas
 		// check archived
 		_, itemArchived := IsArchiveFile(bytes.NewReader(head))
 		if !itemArchived { // mount file
-			archive.Mount(info.NameInArchive, false)
+			archiveFileInfo.mountFile(info.NameInArchive)
 			return
 		}
 		// handle archived item
+		host = info.NameInArchive
 		var (
-			sub          *ArchiveInfo
-			subPasswords *ArchivePasswords
-			subErr       error
+			sub    *ArchiveFileInfo
+			subErr error
 		)
-		if passwords != nil {
-			subPasswords = passwords.Sub(info.NameInArchive)
-		}
 		if info.Size() < 64*1024*1024 { // use memory
 			buf := bytes.NewBuffer(head)
 			cp, cpErr := io.Copy(buf, item)
@@ -395,7 +454,7 @@ func getArchiveInfo(ctx context.Context, filename string, file ReadAtSeeker, pas
 				}
 				return
 			}
-			sub, subErr = getArchiveInfo(ctx, info.Name(), bytes.NewReader(buf.Bytes()), subPasswords)
+			sub, subErr = getArchiveFileInfo(ctx, host, info.Name(), bytes.NewReader(buf.Bytes()), options)
 		} else { // use tmp file
 			// create tmp dir
 			tmpDir, tmpDirErr := CreateTempDir("archives_*")
@@ -423,16 +482,19 @@ func getArchiveInfo(ctx context.Context, filename string, file ReadAtSeeker, pas
 				err = errors.Join(errors.New("failed to open temp file"), tmpFileErr)
 				return
 			}
-			sub, subErr = getArchiveInfo(ctx, tmpFilename, tmpFile, subPasswords)
+			sub, subErr = getArchiveFileInfo(ctx, host, tmpFilename, tmpFile, options)
 			_ = tmpFile.Close()
 			_ = tmpDir.Remove()
 		}
 		if subErr != nil {
+			subItem := archiveFileInfo.mountFile(info.NameInArchive)
+			subItem.Archived = true
+			subItem.PasswordRequired = true
 			err = errors.Join(fmt.Errorf("failed to extract %s", info.NameInArchive), subErr)
 			return
 		}
 		// merge sub
-		archive.Merge(info.NameInArchive, sub)
+		archiveFileInfo.mountArchiveFile(info.NameInArchive, sub)
 		return
 	})
 
@@ -441,7 +503,7 @@ func getArchiveInfo(ctx context.Context, filename string, file ReadAtSeeker, pas
 
 type ExtractArchiveHandler func(ctx context.Context, filename string, archived bool) (dst string, extract bool, err error)
 
-func ExtractArchive(ctx context.Context, filename string, passwords *ArchivePasswords, handler ExtractArchiveHandler) (err error) {
+func ExtractArchive(ctx context.Context, filename string, options *ArchiveExtractOptions, handler ExtractArchiveHandler) (err error) {
 	// open
 	file, openErr := os.Open(filename)
 	if openErr != nil {
@@ -456,7 +518,7 @@ func ExtractArchive(ctx context.Context, filename string, passwords *ArchivePass
 		return
 	}
 	file, _ = os.Open(filename)
-	err = extractArchive(ctx, "", filename, file, passwords, handler)
+	err = extractArchive(ctx, "", filename, file, options, handler)
 	_ = file.Close()
 	if err != nil {
 		err = errors.Join(fmt.Errorf("failed to extract %s", filename), err)
@@ -465,21 +527,23 @@ func ExtractArchive(ctx context.Context, filename string, passwords *ArchivePass
 	return
 }
 
-func extractArchive(ctx context.Context, prefix string, filename string, reader io.Reader, passwords *ArchivePasswords, handler ExtractArchiveHandler) (err error) {
+func extractArchive(ctx context.Context, host string, filename string, file ReadAtSeeker, options *ArchiveExtractOptions, handler ExtractArchiveHandler) (err error) {
 	// get extractor
-	extractor, _, _, extractorErr := getArchiveExtractor(ctx, filename, reader, passwords)
+	extractor, password, passwordRequired, extractorErr := getArchiveExtractor(ctx, host, filename, file, options)
 	if extractorErr != nil {
-		err = errors.Join(errors.New("failed to get archive info"), errors.New("failed to get archive extractor"), extractorErr)
+		if passwordRequired {
+			if password == "" {
+				extractorErr = errors.Join(ErrArchiveFileRequirePassword, extractorErr)
+			} else {
+				extractorErr = errors.Join(ErrArchiveFileInvalidPassword, extractorErr)
+			}
+		}
+		err = errors.Join(errors.New("failed to extract archive file"), errors.New("failed to get archive extractor"), extractorErr)
 		return
 	}
-	// ctx
-	ctx = withArchivePassword(ctx, passwords)
 	// extract
-	err = extractor.Extract(ctx, reader, func(ctx context.Context, info archives.FileInfo) (err error) {
-		// check ctx
-		if err = ctx.Err(); err != nil {
-			return
-		}
+	err = extractor.Extract(ctx, file, func(ctx context.Context, info archives.FileInfo) (err error) {
+
 		return
 	})
 
@@ -518,19 +582,16 @@ func IsArchiveFile(reader io.Reader) (string, bool) {
 	return "", false
 }
 
-func getArchiveExtractor(ctx context.Context, filename string, reader io.Reader, passwords *ArchivePasswords) (v archives.Extractor, mime string, ext string, err error) {
+func getArchiveExtractor(ctx context.Context, host string, filename string, reader io.Reader, options *ArchiveExtractOptions) (v archives.Extractor, password string, passwordRequired bool, err error) {
 	// identify
 	format, _, identifyErr := archives.Identify(ctx, filename, reader)
 	if identifyErr != nil {
 		err = identifyErr
 		return
 	}
-	mime = format.MediaType()
-	ext = format.Extension()
 
 	var (
 		extractor archives.Extractor = nil
-		password  string             = ""
 	)
 EXT:
 	if password == "" {
@@ -584,12 +645,27 @@ EXT:
 		return
 	}
 	if password == "" {
-		password = passwords.Password()
+		passwordRequired = true
+		password = options.Password(filepath.Join(host, filename))
 		if password == "" {
 			return
 		}
 		goto EXT
 	}
 
+	return
+}
+
+func splitDirs(name string) (dirs []string) {
+	name = filepath.Clean(name)
+	if name == "" || name == "." {
+		return
+	}
+	dir, file := filepath.Split(name)
+	if dir != "" {
+		dir = filepath.Dir(dir)
+		dirs = splitDirs(dir)
+	}
+	dirs = append(dirs, file)
 	return
 }
