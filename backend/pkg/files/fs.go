@@ -2,9 +2,11 @@ package files
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type FileInfo struct {
@@ -33,11 +35,30 @@ func NewDirFS(filename string) (v *DirFS, err error) {
 }
 
 type DirFS struct {
-	path string
-	dir  fs.FS
+	path      string
+	dir       fs.FS
+	scratches []string
 }
 
 func (df *DirFS) Path() string { return df.path }
+
+func (df *DirFS) Size() int64 {
+	info, infoErr := os.Stat(df.path)
+	if infoErr != nil {
+		if os.IsNotExist(infoErr) {
+			return 0
+		}
+		panic(infoErr)
+	}
+	return info.Size()
+}
+
+func (df *DirFS) Rollback() {
+	for _, entry := range df.scratches {
+		_ = os.RemoveAll(entry)
+	}
+	df.scratches = df.scratches[:0]
+}
 
 func (df *DirFS) DirList() (v []string, err error) {
 	entries, dirErr := fs.ReadDir(df.dir, ".")
@@ -139,6 +160,103 @@ func (df *DirFS) ReadFile(name string) (data []byte, err error) {
 }
 
 func (df *DirFS) WriteFile(name string, data []byte) (err error) {
-	err = os.WriteFile(filepath.Join(df.path, name), data, 0644)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		err = errors.New("name must not be empty")
+		return
+	}
+	name = filepath.Clean(name)
+	path := filepath.Join(df.path, name)
+	dir := filepath.Dir(path)
+	if exist, _ := Exist(dir); !exist {
+		if err = Mkdir(dir); err != nil {
+			return
+		}
+	}
+	if err = os.WriteFile(filepath.Join(df.path, name), data, 0644); err != nil {
+		return
+	}
+	df.addScratch(name)
+	return
+}
+
+func (df *DirFS) CopyFile(name string, reader io.Reader) (err error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		err = errors.New("name must not be empty")
+		return
+	}
+	name = filepath.Clean(name)
+	path := filepath.Join(df.path, name)
+	dir := filepath.Dir(path)
+	if exist, _ := Exist(dir); !exist {
+		if err = Mkdir(dir); err != nil {
+			return
+		}
+	}
+	file, openErr := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	if openErr != nil {
+		err = openErr
+		return
+	}
+	_, err = io.Copy(file, reader)
+	_ = file.Close()
+	if err != nil {
+		return
+	}
+	df.addScratch(name)
+	return
+}
+
+func (df *DirFS) CreateDir(name string) (err error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		err = errors.New("name must not be empty")
+		return
+	}
+	name = filepath.Clean(name)
+	path := filepath.Join(df.path, name)
+	dir := filepath.Dir(path)
+	if exist, _ := Exist(dir); !exist {
+		if err = Mkdir(dir); err != nil {
+			return
+		}
+		df.addScratch(name)
+		return
+	}
+	return
+}
+
+func (df *DirFS) addScratch(filename string) {
+	dir, file := filepath.Split(filename)
+	if dir == "" {
+		for _, entry := range df.scratches {
+			if entry == file {
+				return
+			}
+		}
+		df.scratches = append(df.scratches, file)
+		return
+	}
+	dirs := splitDirs(dir)
+	for _, entry := range df.scratches {
+		if entry == dirs[0] {
+			return
+		}
+	}
+	df.scratches = append(df.scratches, dirs[0])
+}
+
+func splitDirs(name string) (dirs []string) {
+	name = filepath.Clean(name)
+	if name == "" || name == "." {
+		return
+	}
+	dir, file := filepath.Split(name)
+	if dir != "" {
+		dir = filepath.Dir(dir)
+		dirs = splitDirs(dir)
+	}
+	dirs = append(dirs, file)
 	return
 }

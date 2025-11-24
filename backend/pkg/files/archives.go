@@ -438,7 +438,7 @@ func getArchiveFileInfo(ctx context.Context, host string, filename string, file 
 			return
 		}
 		// handle archived item
-		host = info.NameInArchive
+		host = filepath.Join(host, info.NameInArchive)
 		var (
 			sub    *ArchiveFileInfo
 			subErr error
@@ -501,9 +501,47 @@ func getArchiveFileInfo(ctx context.Context, host string, filename string, file 
 	return
 }
 
-type ExtractArchiveHandler func(ctx context.Context, filename string, archived bool) (dst string, extract bool, err error)
+var (
+	ErrExtractArchiveDstInvalid  = errors.New("invalid dst")
+	ErrExtractArchiveDstNotEmpty = errors.New("dst not empty")
+)
 
-func ExtractArchive(ctx context.Context, filename string, options *ArchiveExtractOptions, handler ExtractArchiveHandler) (err error) {
+type ExtractArchiveHandler func(ctx context.Context, host string, filename string) (dst string, err error)
+
+func ExtractArchive(ctx context.Context, dst string, options *ArchiveExtractOptions, handler ExtractArchiveHandler) (err error) {
+	// dst
+	dst = strings.TrimSpace(dst)
+	if dst == "" {
+		err = errors.Join(errors.New("failed to extract archive file"), errors.New("dst is missing"))
+		return
+	}
+	if !filepath.IsAbs(dst) {
+		dst, err = filepath.Abs(dst)
+		if err != nil {
+			err = errors.Join(errors.New("failed to extract archive file"), errors.New("failed to get abs of dst"), err)
+			return
+		}
+	}
+	dstFS, dstErr := NewDirFS(dst)
+	if dstErr != nil {
+		err = errors.Join(errors.New("failed to extract archive file"), ErrExtractArchiveDstInvalid, dstErr)
+		return
+	}
+	if dstFS.Size() > 0 {
+		err = errors.Join(errors.New("failed to extract archive file"), ErrExtractArchiveDstNotEmpty)
+		return
+	}
+
+	if options == nil {
+		err = errors.Join(errors.New("failed to extract archive file"), errors.New("options is nil"))
+		return
+	}
+
+	filename := filepath.Clean(strings.TrimSpace(options.filename))
+	if filename == "" || filename == "." {
+		err = errors.Join(errors.New("failed to extract archive file"), errors.New("filename is missing"))
+		return
+	}
 	// open
 	file, openErr := os.Open(filename)
 	if openErr != nil {
@@ -514,20 +552,21 @@ func ExtractArchive(ctx context.Context, filename string, options *ArchiveExtrac
 	_, isArchived := IsArchiveFile(file)
 	_ = file.Close()
 	if !isArchived {
-		err = errors.Join(errors.New("failed to get archive info"), fmt.Errorf("file %s is not archived", filename))
+		err = errors.Join(errors.New("failed to extract archive file"), fmt.Errorf("file %s is not archived", filename))
 		return
 	}
 	file, _ = os.Open(filename)
-	err = extractArchive(ctx, "", filename, file, options, handler)
+	err = extractArchive(ctx, dstFS, "", filename, file, options, handler)
 	_ = file.Close()
 	if err != nil {
-		err = errors.Join(fmt.Errorf("failed to extract %s", filename), err)
+		dstFS.Rollback()
+		err = errors.Join(errors.New("failed to extract archive file"), err)
 		return
 	}
 	return
 }
 
-func extractArchive(ctx context.Context, host string, filename string, file ReadAtSeeker, options *ArchiveExtractOptions, handler ExtractArchiveHandler) (err error) {
+func extractArchive(ctx context.Context, dst *DirFS, host string, filename string, file ReadAtSeeker, options *ArchiveExtractOptions, handler ExtractArchiveHandler) (err error) {
 	// get extractor
 	extractor, password, passwordRequired, extractorErr := getArchiveExtractor(ctx, host, filename, file, options)
 	if extractorErr != nil {
@@ -541,12 +580,157 @@ func extractArchive(ctx context.Context, host string, filename string, file Read
 		err = errors.Join(errors.New("failed to extract archive file"), errors.New("failed to get archive extractor"), extractorErr)
 		return
 	}
+
 	// extract
 	err = extractor.Extract(ctx, file, func(ctx context.Context, info archives.FileInfo) (err error) {
+		// ctx
+		if err = ctx.Err(); err != nil {
+			return
+		}
+		// discard
+		fileInfoPath := filepath.Clean(info.NameInArchive)
+		if host != "" {
+			fileInfoPath = filepath.Clean(filepath.Join(filepath.Clean(host), info.NameInArchive))
+		}
+		if options.IsDiscardEntry(fileInfoPath) {
+			return
+		}
+		// dir
+		if info.IsDir() { // discard
+			return
+		}
+		// file
+		item, itemErr := info.Open()
+		if itemErr != nil {
+			err = itemErr
+			return
+		}
+		defer item.Close()
+		// buf
+		head := make([]byte, 64)
+		headN, headErr := io.ReadFull(item, head)
+		if headN == 0 {
+			if errors.Is(headErr, io.EOF) {
+				// empty file
+				return
+			}
+			err = errors.Join(fmt.Errorf("failed to read %s", info.NameInArchive), headErr)
+			return
+		}
+		head = head[:headN]
 
+		// check archived
+		_, itemArchived := IsArchiveFile(bytes.NewReader(head))
+		if !itemArchived { // write file
+			itemPath, hErr := handler(ctx, host, fileInfoPath)
+			if hErr != nil {
+				err = hErr
+				return
+			}
+			itemPath = strings.TrimSpace(itemPath)
+			if itemPath == "" {
+				return
+			}
+			if errors.Is(headErr, io.EOF) { // full read
+				err = dst.WriteFile(itemPath, head)
+			} else { // build composite reader
+				src := NewCompositeByteReader(head, item)
+				err = dst.CopyFile(itemPath, src)
+			}
+			return
+		}
+		// handle archived item
+		host = filepath.Join(host, info.NameInArchive)
+		if info.Size() < 64*1024*1024 { // use memory
+			buf := bytes.NewBuffer(head)
+			cp, cpErr := io.Copy(buf, item)
+			if cp+int64(headN) != info.Size() {
+				if errors.Is(cpErr, io.EOF) {
+					err = errors.Join(fmt.Errorf("failed to read %s", info.NameInArchive))
+				} else {
+					err = errors.Join(fmt.Errorf("failed to read %s", info.NameInArchive), cpErr)
+				}
+				return
+			}
+			err = extractArchive(ctx, dst, host, info.Name(), bytes.NewReader(buf.Bytes()), options, handler)
+		} else { // use tmp file
+			// create tmp dir
+			tmpDir, tmpDirErr := CreateTempDir("archives_*")
+			if tmpDirErr != nil {
+				err = errors.Join(errors.New("failed to create temp dir"), tmpDirErr)
+				return
+			}
+			// copy file
+			tmpFilename := info.Name()
+			tmpErr := tmpDir.WriteFile(tmpFilename, head)
+			if tmpErr != nil {
+				_ = tmpDir.Remove()
+				err = errors.Join(errors.New("failed to write tmp file"), tmpErr)
+				return
+			}
+			tmpErr = tmpDir.AppendFile(tmpFilename, item)
+			if tmpErr != nil {
+				_ = tmpDir.Remove()
+				err = errors.Join(errors.New("failed to write tmp file"), tmpErr)
+				return
+			}
+			tmpFile, tmpFileErr := tmpDir.OpenFile(tmpFilename)
+			if tmpFileErr != nil {
+				_ = tmpDir.Remove()
+				err = errors.Join(errors.New("failed to open temp file"), tmpFileErr)
+				return
+			}
+			err = extractArchive(ctx, dst, host, tmpFilename, tmpFile, options, handler)
+			_ = tmpFile.Close()
+			_ = tmpDir.Remove()
+		}
 		return
 	})
+	return
+}
 
+func NewCompositeByteReader(b []byte, r io.Reader) io.Reader {
+	return &CompositeByteReader{
+		n: 0,
+		b: b,
+		r: r,
+	}
+}
+
+type CompositeByteReader struct {
+	n int
+	b []byte
+	r io.Reader
+	e error
+}
+
+func (cbr *CompositeByteReader) Read(p []byte) (n int, err error) {
+	if len(p) == 0 {
+		err = io.ErrShortBuffer
+		return
+	}
+	if cbr.n < len(cbr.b) {
+		cp := copy(p, cbr.b[cbr.n:])
+		cbr.n += cp
+		n = cp
+		if n == len(p) {
+			return
+		}
+	}
+	if cbr.e != nil {
+		err = cbr.e
+		return
+	}
+	nn, rErr := cbr.r.Read(p[n:])
+	n += nn
+	if errors.Is(rErr, io.EOF) {
+		cbr.e = io.EOF
+		if n == 0 {
+			err = io.EOF
+		}
+		return
+	}
+	err = rErr
 	return
 }
 
@@ -656,16 +840,21 @@ EXT:
 	return
 }
 
-func splitDirs(name string) (dirs []string) {
-	name = filepath.Clean(name)
-	if name == "" || name == "." {
-		return
+func CleanArchiveFilename(host string, filename string) (out string) {
+	host = filepath.ToSlash(filepath.Clean(host))
+	filename = filepath.ToSlash(filepath.Clean(filename))
+	if host != "." {
+		dir, file := filepath.Split(host)
+		if dir == "" {
+			out, _ = strings.CutPrefix(filename, file+"/")
+		} else {
+			dir = filepath.ToSlash(filepath.Clean(dir))
+			left, _ := strings.CutSuffix(host, file)
+			right, _ := strings.CutPrefix(filename, host+"/")
+			out = filepath.Join(left, right)
+		}
+	} else {
+		out = filename
 	}
-	dir, file := filepath.Split(name)
-	if dir != "" {
-		dir = filepath.Dir(dir)
-		dirs = splitDirs(dir)
-	}
-	dirs = append(dirs, file)
 	return
 }

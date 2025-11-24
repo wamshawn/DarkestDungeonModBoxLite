@@ -1,7 +1,10 @@
 package files_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +14,39 @@ import (
 
 func TestDir(t *testing.T) {
 	t.Log(filepath.Join("", "foo.txt"))
+}
+
+func TestRM(t *testing.T) {
+	t.Log(os.RemoveAll(`F:\games\暗黑地牢\test\xxx.txt`))
+}
+
+func TestNewCompositeByteReader(t *testing.T) {
+	r := files.NewCompositeByteReader([]byte("hello"), bytes.NewReader([]byte(" world")))
+
+	buf := bytes.NewBuffer(nil)
+	b := make([]byte, 4)
+	for {
+		n, err := r.Read(b)
+		buf.Write(b[:n])
+		t.Log(n, string(b[:n]), err)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			t.Error(err)
+			return
+		}
+	}
+	t.Log(buf.String())
+
+	r = files.NewCompositeByteReader([]byte("hello"), bytes.NewReader([]byte(" world")))
+	buf.Reset()
+	cp, cpErr := io.Copy(buf, r)
+	t.Log(cp, buf.String(), cpErr)
+	if cpErr != nil {
+		t.Error(cpErr)
+	}
+	return
 }
 
 func TestGetArchiveInfo(t *testing.T) {
@@ -47,6 +83,35 @@ func TestGetArchiveInfo(t *testing.T) {
 	t.Log(info)
 }
 
+type ModuleFS struct {
+	root string
+}
+
+func TestExtractArchive(t *testing.T) {
+	ctx := context.Background()
+	dst := `F:\games\暗黑地牢\test_out`
+	filename := `F:\games\暗黑地牢\test.zip`
+	options := files.ArchiveFile(filename).
+		SetPassword("111").
+		SetEntryPassword(`test/ZIMIK Arbalest skin.7z`, "222").
+		DiscardEntry(`test\empty`)
+
+	err := files.ExtractArchive(ctx, dst, options, func(ctx context.Context, host string, filename string) (dst string, err error) {
+		dst = files.CleanArchiveFilename(host, filename)
+		return
+	})
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestCut(t *testing.T) {
+	host := ``
+	filename := `ZIMIK Arbalest skin.7z/ZIMIK Arbalest skin/foo.txt`
+	t.Log(files.CleanArchiveFilename(host, filename))
+
+}
+
 func TestArchiveExtractOptions_IsDiscardEntry(t *testing.T) {
 
 	options := files.ArchiveFile(`F:\games\暗黑地牢\test.zip`)
@@ -71,8 +136,8 @@ func TestArchiveExtractOptions_IsDiscardEntry(t *testing.T) {
 }
 
 func TestClean(t *testing.T) {
-	t.Log(filepath.Clean(""))
-	t.Log(filepath.Split(filepath.Clean("./foo")))
+	t.Log(filepath.Clean("foo/xxx/"))
+	t.Log(filepath.Split(filepath.Clean("xxx/foo")))
 	t.Log(filepath.Dir(""))
 	t.Log(filepath.Join(filepath.Join("foo", "bar"), "bar.txt"))
 	t.Log(filepath.Join("", "baz.txt"))
