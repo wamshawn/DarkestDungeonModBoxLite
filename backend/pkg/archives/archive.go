@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -49,12 +50,25 @@ func (file *File) Filename() string {
 	return file.filename
 }
 
-func (file *File) Host() []string {
-	if file.host == nil {
-		return []string{file.name}
+func (file *File) Path() string {
+	hosts := file.Host()
+	if len(hosts) == 0 {
+		return file.name
 	}
-	p := file.host.Host()
-	return append(p, file.name)
+	return filepath.Clean(filepath.Join(filepath.Join(hosts...), file.name))
+}
+
+func (file *File) Host() []string {
+	hosts := make([]string, 0, 1)
+	host := file.host
+LOOP:
+	if host == nil {
+		slices.Reverse(hosts)
+		return hosts
+	}
+	hosts = append(hosts, host.name)
+	host = host.host
+	goto LOOP
 }
 
 func (file *File) SetPassword(password string) {
@@ -67,8 +81,12 @@ func (file *File) SetEntryPassword(path string, password string) {
 	if path == "" || path == "." {
 		return
 	}
-	path = filepath.Join(file.name, path)
 	file.option.SetPassword(path, password)
+	file.option.SetExtracted(path)
+}
+
+func (file *File) ExtractedEntry(path string) {
+	file.option.SetExtracted(path)
 }
 
 func (file *File) DiscardEntry(path string) {
@@ -77,7 +95,6 @@ func (file *File) DiscardEntry(path string) {
 	if path == "" || path == "." {
 		return
 	}
-	path = filepath.Join(file.name, path)
 	file.option.SetDiscard(path)
 }
 

@@ -17,16 +17,16 @@ import (
 
 func (file *File) fork(filename string, r Reader) (sub *File) {
 	sub = &File{
-		name:   filepath.ToSlash(filename),
-		option: file.option,
-		reader: r,
-		host:   file,
+		name:     filepath.ToSlash(filename),
+		filename: filepath.ToSlash(filepath.Join(filepath.Join(file.Path()), filename)),
+		option:   file.option,
+		reader:   r,
+		host:     file,
 	}
 	return
 }
 
 type Entry struct {
-	hosts  []string
 	name   string
 	info   fs.FileInfo
 	header any
@@ -35,14 +35,6 @@ type Entry struct {
 
 func (e *Entry) Name() string {
 	return e.name
-}
-
-func (e *Entry) Hosts() []string {
-	return e.hosts
-}
-
-func (e *Entry) Path() string {
-	return filepath.Join(filepath.Join(e.hosts...), e.name)
 }
 
 func (e *Entry) Info() fs.FileInfo {
@@ -61,16 +53,26 @@ func (e *Entry) Header() any {
 type ExtractHandler func(ctx context.Context, entry *Entry) (err error)
 
 func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err error) {
-	password := file.option.GetPassword(file.name)
+	encrypted, encryptedErr := file.Encrypted(ctx)
+	if encryptedErr != nil {
+		err = encryptedErr
+		return
+	}
 
-	extractor, identifyErr := file.identify(ctx, password)
-	if identifyErr != nil {
-		err = identifyErr
+	var extractor archives.Extractor
+	if encrypted {
+		path := file.Path()
+		password := file.option.GetPassword(path)
+		extractor, err = file.identify(ctx, password)
+	} else {
+		extractor, err = file.identify(ctx, "")
+	}
+	if err != nil {
 		return
 	}
 
 	err = extractor.Extract(ctx, file.reader, func(ctx context.Context, info archives.FileInfo) (err error) {
-		filename := filepath.ToSlash(filepath.Join(filepath.Join(file.Host()...), info.NameInArchive))
+		filename := filepath.ToSlash(filepath.Join(filepath.Join(file.Path()), info.NameInArchive))
 		// discard
 		if file.option.Discarded(filename) {
 			return
@@ -84,8 +86,7 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 		// dir
 		if info.IsDir() {
 			err = handler(ctx, &Entry{
-				hosts:  file.Host(),
-				name:   info.NameInArchive,
+				name:   filename,
 				info:   info.FileInfo,
 				header: info.Header,
 				reader: reader,
@@ -100,8 +101,7 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			if errors.Is(headErr, io.EOF) {
 				// empty file
 				err = handler(ctx, &Entry{
-					hosts:  file.Host(),
-					name:   info.NameInArchive,
+					name:   filename,
 					info:   info.FileInfo,
 					header: info.Header,
 					reader: bytes.NewReader(nil),
@@ -116,8 +116,7 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 		_, archived := TryValidate(bytes.NewReader(head))
 		if !archived { // not archived
 			err = handler(ctx, &Entry{
-				hosts:  file.Host(),
-				name:   info.NameInArchive,
+				name:   filename,
 				info:   info.FileInfo,
 				header: info.Header,
 				reader: ioutil.NewCompositeByteReader(head, reader),
@@ -127,8 +126,7 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 		// try extract entry
 		if !file.option.Extracted(filename) { // not extract
 			err = handler(ctx, &Entry{
-				hosts:  file.Host(),
-				name:   info.NameInArchive,
+				name:   filename,
 				info:   info.FileInfo,
 				header: info.Header,
 				reader: ioutil.NewCompositeByteReader(head, reader),
@@ -136,6 +134,7 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			return
 		}
 		// extract
+		var sub *File
 		if info.Size() < 64*1024*1024 { // use memory
 			buf := bytes.NewBuffer(head)
 			cp, cpErr := io.Copy(buf, reader)
@@ -147,10 +146,7 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 				}
 				return
 			}
-			sub := file.fork(info.NameInArchive, bytes.NewReader(buf.Bytes()))
-			if err = sub.Extract(ctx, handler); err != nil {
-				return
-			}
+			sub = file.fork(info.NameInArchive, bytes.NewReader(buf.Bytes()))
 		} else { // use tmp file
 			// tmp dir
 			tmpDir, createTmpDirErr := os.MkdirTemp("", "DarkestDungeonModBox_archives_*")
@@ -177,10 +173,10 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 				return
 			}
 			// fork
-			sub := file.fork(info.NameInArchive, tmpFile)
-			if err = sub.Extract(ctx, handler); err != nil {
-				return
-			}
+			sub = file.fork(info.NameInArchive, tmpFile)
+		}
+		if err = sub.Extract(ctx, handler); err != nil {
+			return
 		}
 		// file <<<
 		return

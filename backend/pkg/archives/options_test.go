@@ -29,3 +29,12 @@ func TestOption_Discarded(t *testing.T) {
 	t.Log(opt.Discarded("foo.zip/foo"))
 
 }
+
+func TestOption_Extracted(t *testing.T) {
+	opt := archives.Option{}
+	opt.SetPassword("test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z", "222")
+	opt.SetExtracted("test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z")
+	t.Log(opt.Extracted("test.zip/test/foo.7z"))
+	t.Log(opt.Extracted("test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z"))
+	t.Log(opt.GetPassword("test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z"))
+}
