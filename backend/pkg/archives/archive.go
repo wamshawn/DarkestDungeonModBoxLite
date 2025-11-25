@@ -24,25 +24,41 @@ func New(filename string, src Reader) (file *File, err error) {
 		return
 	}
 	file = &File{
-		name:   filepath.ToSlash(filename),
-		option: &Option{},
-		reader: src,
+		name:     filepath.Base(filename),
+		filename: filepath.ToSlash(filename),
+		option:   &Option{},
+		reader:   src,
+		host:     nil,
 	}
 	return
 }
 
 type File struct {
-	name   string
-	option *Option
-	reader Reader
+	name     string
+	filename string
+	option   *Option
+	reader   Reader
+	host     *File
 }
 
 func (file *File) Name() string {
 	return file.name
 }
 
+func (file *File) Filename() string {
+	return file.filename
+}
+
+func (file *File) Host() []string {
+	if file.host == nil {
+		return []string{file.name}
+	}
+	p := file.host.Host()
+	return append(p, file.name)
+}
+
 func (file *File) SetPassword(password string) {
-	file.option.SetPassword(filepath.Base(file.name), password)
+	file.option.SetPassword(file.name, password)
 }
 
 func (file *File) SetEntryPassword(path string, password string) {
@@ -51,7 +67,7 @@ func (file *File) SetEntryPassword(path string, password string) {
 	if path == "" || path == "." {
 		return
 	}
-	path = filepath.Join(filepath.Base(file.name), path)
+	path = filepath.Join(file.name, path)
 	file.option.SetPassword(path, password)
 }
 
@@ -61,7 +77,7 @@ func (file *File) DiscardEntry(path string) {
 	if path == "" || path == "." {
 		return
 	}
-	path = filepath.Join(filepath.Base(file.name), path)
+	path = filepath.Join(file.name, path)
 	file.option.SetDiscard(path)
 }
 

@@ -12,6 +12,7 @@ type Option struct {
 	filename string
 	password string
 	discard  bool
+	extract  bool
 	parent   *Option
 	children []*Option
 }
@@ -66,12 +67,41 @@ LOOP:
 	return false
 }
 
+func (option *Option) Extracted(filename string) bool {
+	filename = strings.TrimSpace(filename)
+	filename = filepath.Clean(filename)
+	if filename == "" || filename == "." {
+		return false
+	}
+	target, _ := option.get(filename)
+	if target == nil {
+		return false
+	}
+	if target.extract {
+		return true
+	}
+	parent := target.parent
+LOOP:
+	if parent != nil {
+		if parent.extract {
+			return true
+		}
+		parent = parent.parent
+		goto LOOP
+	}
+	return false
+}
+
 func (option *Option) SetPassword(filename string, password string) {
-	option.update(filename, password, false)
+	option.update(filename, password, false, false)
 }
 
 func (option *Option) SetDiscard(filename string) {
-	option.update(filename, "", true)
+	option.update(filename, "", true, false)
+}
+
+func (option *Option) SetExtracted(filename string) {
+	option.update(filename, "", false, true)
 }
 
 func (option *Option) get(filename string) (target *Option, leaf bool) {
@@ -139,7 +169,7 @@ MATCH:
 	return
 }
 
-func (option *Option) update(target string, password string, discard bool) {
+func (option *Option) update(target string, password string, discard bool, extracted bool) {
 	dirs, file := ioutil.Split(target)
 	if file == "" {
 		return
@@ -149,12 +179,14 @@ func (option *Option) update(target string, password string, discard bool) {
 			option.filename = file
 			option.password = password
 			option.discard = discard
+			option.extract = extracted
 			return
 		}
 		for _, child := range option.children {
 			if child.filename == file {
 				option.password = password
 				option.discard = discard
+				option.extract = extracted
 				return
 			}
 		}
@@ -162,6 +194,7 @@ func (option *Option) update(target string, password string, discard bool) {
 			filename: file,
 			password: password,
 			discard:  discard,
+			extract:  extracted,
 			parent:   option,
 			children: nil,
 		}
@@ -179,12 +212,12 @@ func (option *Option) update(target string, password string, discard bool) {
 	}
 	dirs = dirs[1:]
 	if len(dirs) == 0 {
-		option.update(file, password, discard)
+		option.update(file, password, discard, extracted)
 		return
 	}
 	for _, child := range option.children {
 		if child.filename == dirs[0] {
-			child.update(filepath.Join(filepath.Join(dirs[1:]...), file), password, discard)
+			child.update(filepath.Join(filepath.Join(dirs[1:]...), file), password, discard, extracted)
 			return
 		}
 	}
@@ -197,7 +230,7 @@ func (option *Option) update(target string, password string, discard bool) {
 		children: nil,
 	}
 	option.children = append(option.children, child)
-	child.update(filepath.Join(filepath.Join(dirs[1:]...), file), password, discard)
+	child.update(filepath.Join(filepath.Join(dirs[1:]...), file), password, discard, extracted)
 	return
 }
 
