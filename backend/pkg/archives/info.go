@@ -107,6 +107,20 @@ func (info *FileInfo) Match(pattern string) (targets []*FileInfo) {
 	return
 }
 
+func (info *FileInfo) InvalidArchivedEntries() (targets []*FileInfo) {
+	for _, child := range info.Children {
+		r := child.InvalidArchivedEntries()
+		if len(r) > 0 {
+			targets = append(targets, r...)
+		}
+	}
+	if info.Archived && info.Encrypted && info.PasswordInvalid {
+		targets = append(targets, info)
+		return
+	}
+	return
+}
+
 func (info *FileInfo) Root() *FileInfo {
 	parent := info.Parent
 LOOP:

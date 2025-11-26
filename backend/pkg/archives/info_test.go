@@ -25,13 +25,17 @@ func TestFile_Info(t *testing.T) {
 		return
 	}
 	file.SetPassword("111")
-	file.SetEntryPassword(`test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z`, "222")
+	file.SetEntryPassword(`test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z`, "111")
 
 	ctx := context.Background()
 
 	info, infoErr := file.Info(ctx, "*/project.xml")
 	if infoErr != nil {
 		t.Error(infoErr)
+		targets := info.InvalidArchivedEntries()
+		for _, target := range targets {
+			t.Log(target.Path())
+		}
 		t.Log(info.String())
 		return
 	}
