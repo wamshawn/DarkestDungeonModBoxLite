@@ -11,7 +11,7 @@ import (
 )
 
 func (file *File) Validate(ctx context.Context) (err error) {
-	password := file.option.GetPassword(file.name)
+	password := file.option.GetPassword(file.Path())
 
 	extractor, identifyErr := file.identify(ctx, password)
 	if identifyErr != nil {

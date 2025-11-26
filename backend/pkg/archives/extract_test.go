@@ -41,7 +41,7 @@ func TestFile_Extract(t *testing.T) {
 		if entry.Info().IsDir() {
 			return
 		}
-		if entry.Archived() {
+		if ok, _, _ := entry.Archived(); ok {
 			return
 		}
 		path := filepath.ToSlash(entry.Name())

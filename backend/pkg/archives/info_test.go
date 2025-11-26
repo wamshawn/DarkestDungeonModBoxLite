@@ -3,6 +3,7 @@ package archives_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"DarkestDungeonModBoxLite/backend/pkg/archives"
@@ -23,13 +24,29 @@ func TestFile_Info(t *testing.T) {
 		t.Error(fileErr)
 		return
 	}
+	file.SetPassword("111")
+	file.SetEntryPassword(`test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z`, "222")
 
 	ctx := context.Background()
 
-	info, infoErr := file.Info(ctx)
+	info, infoErr := file.Info(ctx, "*/project.xml")
 	if infoErr != nil {
 		t.Error(infoErr)
 		return
 	}
-	t.Log(info)
+
+	targets := info.Match("*/project.xml")
+	for _, target := range targets {
+		t.Log("matched", target.Path())
+		t.Log(string(target.Preview))
+	}
+
+	t.Log(info.String())
+}
+
+func TestMatch(t *testing.T) {
+
+	t.Log(filepath.Match("bbb/project.xml", "foo/project.xml"))
+	t.Log(filepath.Match("777/*/project.xml", "777/555/project.xml"))
+
 }

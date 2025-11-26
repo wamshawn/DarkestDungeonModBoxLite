@@ -3,22 +3,21 @@ package archives
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"path/filepath"
 
 	"DarkestDungeonModBoxLite/backend/pkg/archives/pkg/ioutil"
-
-	"github.com/tidwall/match"
 )
 
 type FileInfo struct {
-	Name             string      `json:"name"`
-	IsDir            bool        `json:"isDir"`
-	Archived         bool        `json:"archived"`
-	Password         string      `json:"password"`
-	PasswordRequired bool        `json:"passwordRequired"`
-	Parent           *FileInfo   `json:"-"`
-	Preview          []byte      `json:"-"`
-	Children         []*FileInfo `json:"children"`
+	Name      string      `json:"name"`
+	IsDir     bool        `json:"isDir"`
+	Archived  bool        `json:"archived"`
+	Encrypted bool        `json:"encrypted"`
+	Password  string      `json:"password"`
+	Parent    *FileInfo   `json:"-"`
+	Preview   []byte      `json:"-"`
+	Children  []*FileInfo `json:"children"`
 }
 
 func (info *FileInfo) add(dirs []string, file string, preview []byte) (result *FileInfo) {
@@ -38,7 +37,7 @@ func (info *FileInfo) add(dirs []string, file string, preview []byte) (result *F
 	}
 	topDir := dirs[0]
 	for _, child := range info.Children {
-		if child.IsDir && child.Name == topDir {
+		if child.Name == topDir {
 			result = child.add(dirs[1:], file, preview)
 			return
 		}
@@ -56,25 +55,21 @@ func (info *FileInfo) add(dirs []string, file string, preview []byte) (result *F
 
 func (info *FileInfo) mountDir(filename string) (result *FileInfo) {
 	dirs, file := ioutil.Split(filepath.Clean(filename))
-	result = info.add(append(dirs, file), "", nil)
+	result = info.add(append(dirs[1:], file), "", nil)
 	return
 }
 
 func (info *FileInfo) mountFile(filename string, preview []byte) (result *FileInfo) {
 	dirs, file := ioutil.Split(filepath.Clean(filename))
-	result = info.add(dirs, file, preview)
+	result = info.add(dirs[1:], file, preview)
 	return
 }
 
-func (info *FileInfo) mountArchiveFile(filename string, child *FileInfo) (result *FileInfo) {
+func (info *FileInfo) mountArchiveFile(filename string, encrypted bool, password string) (result *FileInfo) {
 	result = info.mountFile(filename, nil)
 	result.Archived = true
-	result.Password = child.Password
-	result.PasswordRequired = child.PasswordRequired
-	result.Children = child.Children
-	for _, c := range result.Children {
-		c.Parent = result
-	}
+	result.Encrypted = encrypted
+	result.Password = password
 	return
 }
 
@@ -96,23 +91,9 @@ func (info *FileInfo) get(filename string) (target *FileInfo) {
 	return
 }
 
-func (info *FileInfo) Find(name string) (targets []*FileInfo) {
-	if info.Name == name {
-		targets = append(targets, info)
-		return
-	}
-	for _, child := range info.Children {
-		r := child.Find(name)
-		if len(r) > 0 {
-			targets = append(targets, r...)
-		}
-	}
-	return
-}
-
 func (info *FileInfo) Match(pattern string) (targets []*FileInfo) {
 	path := info.Path()
-	if match.Match(path, pattern) {
+	if matched, _ := filepath.Match(pattern, path); matched {
 		targets = append(targets, info)
 	}
 	for _, child := range info.Children {
@@ -139,7 +120,7 @@ func (info *FileInfo) Path() string {
 		return ""
 	}
 	if info.Parent == nil {
-		return ""
+		return info.Name
 	}
 	items := []string{info.Name}
 	parent := info.Parent
@@ -155,7 +136,7 @@ LOOP:
 	for i := len(items) - 1; i > -1; i-- {
 		s = filepath.Join(s, items[i])
 	}
-	return s
+	return filepath.ToSlash(s)
 }
 
 func (info *FileInfo) ArchiveEntries() (entries []*FileInfo) {
@@ -173,7 +154,48 @@ func (info *FileInfo) String() string {
 	return string(b)
 }
 
-func (file *File) Info(ctx context.Context) (info *FileInfo, err error) {
-
+func (file *File) Info(ctx context.Context, preview ...string) (info *FileInfo, err error) {
+	encrypted, encryptedErr := file.Encrypted(ctx)
+	if encryptedErr != nil {
+		err = encryptedErr
+		return
+	}
+	password := file.option.GetPassword(file.Path())
+	info = &FileInfo{
+		Name:      file.name,
+		IsDir:     false,
+		Archived:  true,
+		Encrypted: encrypted,
+		Password:  password,
+		Parent:    nil,
+		Preview:   nil,
+		Children:  nil,
+	}
+	err = file.Extract(ctx, func(ctx context.Context, entry *Entry) (err error) {
+		filename := entry.Name()
+		if entry.Info().IsDir() {
+			info.mountDir(filename)
+			return
+		}
+		if ok, entryEncrypted, _ := entry.Archived(); ok {
+			entryPassword := ""
+			if entryEncrypted {
+				entryPassword = file.option.GetPassword(filename)
+			}
+			info.mountArchiveFile(filename, entryEncrypted, entryPassword)
+			return
+		}
+		var data []byte
+		for _, pv := range preview {
+			if matched, _ := filepath.Match(pv, filename); matched {
+				if data, err = io.ReadAll(entry); err != nil {
+					return
+				}
+				break
+			}
+		}
+		info.mountFile(filename, data)
+		return
+	})
 	return
 }

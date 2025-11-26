@@ -27,19 +27,21 @@ func (file *File) fork(filename string, r Reader) (sub *File) {
 }
 
 type Entry struct {
-	name     string
-	archived bool
-	info     fs.FileInfo
-	header   any
-	reader   io.Reader
+	name      string
+	archived  bool
+	encrypted bool
+	extracted bool
+	info      fs.FileInfo
+	header    any
+	reader    io.Reader
 }
 
 func (e *Entry) Name() string {
 	return e.name
 }
 
-func (e *Entry) Archived() bool {
-	return e.archived
+func (e *Entry) Archived() (ok bool, encrypted bool, extracted bool) {
+	return e.archived, e.encrypted, e.extracted
 }
 
 func (e *Entry) Info() fs.FileInfo {
@@ -141,21 +143,23 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			}
 			return
 		}
-		err = handler(ctx, &Entry{
-			name:     filename,
-			archived: true,
-			info:     info.FileInfo,
-			header:   info.Header,
-			reader:   ioutil.NewCompositeByteReader(head, reader),
-		})
-		if err != nil {
-			if errors.Is(err, ErrSkip) {
-				err = nil
-			}
-			return
-		}
 		// try extract entry
 		if !file.option.Extracted(filename) { // not extract
+			err = handler(ctx, &Entry{
+				name:      filename,
+				archived:  true,
+				encrypted: false,
+				extracted: false,
+				info:      info.FileInfo,
+				header:    info.Header,
+				reader:    ioutil.NewCompositeByteReader(head, reader),
+			})
+			if err != nil {
+				if errors.Is(err, ErrSkip) {
+					err = nil
+				}
+				return
+			}
 			return
 		}
 		// extract
@@ -199,6 +203,31 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			}
 			// fork
 			sub = file.fork(info.NameInArchive, tmpFile)
+		}
+
+		if validateErr := sub.Validate(ctx); validateErr != nil {
+			err = validateErr
+			return
+		}
+		subEncrypted, subEncryptedErr := sub.Encrypted(ctx)
+		if subEncryptedErr != nil {
+			err = subEncryptedErr
+			return
+		}
+		err = handler(ctx, &Entry{
+			name:      filename,
+			archived:  true,
+			encrypted: subEncrypted,
+			extracted: true,
+			info:      info.FileInfo,
+			header:    info.Header,
+			reader:    ioutil.NewCompositeByteReader(head, reader),
+		})
+		if err != nil {
+			if errors.Is(err, ErrSkip) {
+				err = nil
+			}
+			return
 		}
 		if err = sub.Extract(ctx, handler); err != nil {
 			if errors.Is(err, ErrSkip) {
