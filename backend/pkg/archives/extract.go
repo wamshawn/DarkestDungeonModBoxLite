@@ -27,14 +27,19 @@ func (file *File) fork(filename string, r Reader) (sub *File) {
 }
 
 type Entry struct {
-	name   string
-	info   fs.FileInfo
-	header any
-	reader io.Reader
+	name     string
+	archived bool
+	info     fs.FileInfo
+	header   any
+	reader   io.Reader
 }
 
 func (e *Entry) Name() string {
 	return e.name
+}
+
+func (e *Entry) Archived() bool {
+	return e.archived
 }
 
 func (e *Entry) Info() fs.FileInfo {
@@ -49,6 +54,10 @@ func (e *Entry) Read(p []byte) (n int, err error) {
 func (e *Entry) Header() any {
 	return e.header
 }
+
+var (
+	ErrSkip = errors.New("skip extract")
+)
 
 type ExtractHandler func(ctx context.Context, entry *Entry) (err error)
 
@@ -86,11 +95,15 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 		// dir
 		if info.IsDir() {
 			err = handler(ctx, &Entry{
-				name:   filename,
-				info:   info.FileInfo,
-				header: info.Header,
-				reader: reader,
+				name:     filename,
+				archived: false,
+				info:     info.FileInfo,
+				header:   info.Header,
+				reader:   reader,
 			})
+			if errors.Is(err, ErrSkip) {
+				err = nil
+			}
 			return
 		}
 		// file >>>
@@ -101,10 +114,11 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			if errors.Is(headErr, io.EOF) {
 				// empty file
 				err = handler(ctx, &Entry{
-					name:   filename,
-					info:   info.FileInfo,
-					header: info.Header,
-					reader: bytes.NewReader(nil),
+					name:     filename,
+					archived: false,
+					info:     info.FileInfo,
+					header:   info.Header,
+					reader:   bytes.NewReader(nil),
 				})
 				return
 			}
@@ -116,21 +130,32 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 		_, archived := TryValidate(bytes.NewReader(head))
 		if !archived { // not archived
 			err = handler(ctx, &Entry{
-				name:   filename,
-				info:   info.FileInfo,
-				header: info.Header,
-				reader: ioutil.NewCompositeByteReader(head, reader),
+				name:     filename,
+				archived: false,
+				info:     info.FileInfo,
+				header:   info.Header,
+				reader:   ioutil.NewCompositeByteReader(head, reader),
 			})
+			if errors.Is(err, ErrSkip) {
+				err = nil
+			}
+			return
+		}
+		err = handler(ctx, &Entry{
+			name:     filename,
+			archived: true,
+			info:     info.FileInfo,
+			header:   info.Header,
+			reader:   ioutil.NewCompositeByteReader(head, reader),
+		})
+		if err != nil {
+			if errors.Is(err, ErrSkip) {
+				err = nil
+			}
 			return
 		}
 		// try extract entry
 		if !file.option.Extracted(filename) { // not extract
-			err = handler(ctx, &Entry{
-				name:   filename,
-				info:   info.FileInfo,
-				header: info.Header,
-				reader: ioutil.NewCompositeByteReader(head, reader),
-			})
 			return
 		}
 		// extract
@@ -176,6 +201,9 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			sub = file.fork(info.NameInArchive, tmpFile)
 		}
 		if err = sub.Extract(ctx, handler); err != nil {
+			if errors.Is(err, ErrSkip) {
+				err = nil
+			}
 			return
 		}
 		// file <<<

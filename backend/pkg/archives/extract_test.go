@@ -41,6 +41,9 @@ func TestFile_Extract(t *testing.T) {
 		if entry.Info().IsDir() {
 			return
 		}
+		if entry.Archived() {
+			return
+		}
 		path := filepath.ToSlash(entry.Name())
 		t.Log(path)
 		for srcPrefix, dstPrefix := range targets {
