@@ -10,14 +10,15 @@ import (
 )
 
 type FileInfo struct {
-	Name      string      `json:"name"`
-	IsDir     bool        `json:"isDir"`
-	Archived  bool        `json:"archived"`
-	Encrypted bool        `json:"encrypted"`
-	Password  string      `json:"password"`
-	Parent    *FileInfo   `json:"-"`
-	Preview   []byte      `json:"-"`
-	Children  []*FileInfo `json:"children"`
+	Name            string      `json:"name"`
+	IsDir           bool        `json:"isDir"`
+	Archived        bool        `json:"archived"`
+	Encrypted       bool        `json:"encrypted"`
+	Password        string      `json:"password"`
+	PasswordInvalid bool        `json:"passwordInvalid"`
+	Parent          *FileInfo   `json:"-"`
+	Preview         []byte      `json:"-"`
+	Children        []*FileInfo `json:"children"`
 }
 
 func (info *FileInfo) add(dirs []string, file string, preview []byte) (result *FileInfo) {
@@ -65,11 +66,12 @@ func (info *FileInfo) mountFile(filename string, preview []byte) (result *FileIn
 	return
 }
 
-func (info *FileInfo) mountArchiveFile(filename string, encrypted bool, password string) (result *FileInfo) {
+func (info *FileInfo) mountArchiveFile(filename string, encrypted bool, passwordInvalid bool, password string) (result *FileInfo) {
 	result = info.mountFile(filename, nil)
 	result.Archived = true
 	result.Encrypted = encrypted
 	result.Password = password
+	result.PasswordInvalid = passwordInvalid
 	return
 }
 
@@ -177,12 +179,12 @@ func (file *File) Info(ctx context.Context, preview ...string) (info *FileInfo, 
 			info.mountDir(filename)
 			return
 		}
-		if ok, entryEncrypted, _ := entry.Archived(); ok {
+		if ok, entryEncrypted, entryPasswordInvalid, _ := entry.Archived(); ok {
 			entryPassword := ""
 			if entryEncrypted {
 				entryPassword = file.option.GetPassword(filename)
 			}
-			info.mountArchiveFile(filename, entryEncrypted, entryPassword)
+			info.mountArchiveFile(filename, entryEncrypted, entryPasswordInvalid, entryPassword)
 			return
 		}
 		var data []byte

@@ -11,7 +11,19 @@ import (
 )
 
 func (file *File) Validate(ctx context.Context) (err error) {
-	password := file.option.GetPassword(file.Path())
+	encrypted, encryptedErr := file.Encrypted(ctx)
+	if encryptedErr != nil {
+		err = encryptedErr
+		return
+	}
+	password := ""
+	if encrypted {
+		password = file.option.GetPassword(file.Path())
+		if password == "" {
+			err = ErrPasswordRequired
+			return
+		}
+	}
 
 	extractor, identifyErr := file.identify(ctx, password)
 	if identifyErr != nil {
@@ -44,6 +56,9 @@ func (file *File) Validate(ctx context.Context) (err error) {
 	resetErr := file.reset()
 
 	if err != nil {
+		if encrypted {
+			err = errors.Join(err, ErrPasswordInvalid)
+		}
 		if resetErr != nil {
 			err = errors.Join(err, resetErr)
 			return

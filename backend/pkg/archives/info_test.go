@@ -32,6 +32,7 @@ func TestFile_Info(t *testing.T) {
 	info, infoErr := file.Info(ctx, "*/project.xml")
 	if infoErr != nil {
 		t.Error(infoErr)
+		t.Log(info.String())
 		return
 	}
 

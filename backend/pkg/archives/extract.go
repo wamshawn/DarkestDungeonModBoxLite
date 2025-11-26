@@ -27,21 +27,22 @@ func (file *File) fork(filename string, r Reader) (sub *File) {
 }
 
 type Entry struct {
-	name      string
-	archived  bool
-	encrypted bool
-	extracted bool
-	info      fs.FileInfo
-	header    any
-	reader    io.Reader
+	name            string
+	archived        bool
+	encrypted       bool
+	passwordInvalid bool
+	extracted       bool
+	info            fs.FileInfo
+	header          any
+	reader          io.Reader
 }
 
 func (e *Entry) Name() string {
 	return e.name
 }
 
-func (e *Entry) Archived() (ok bool, encrypted bool, extracted bool) {
-	return e.archived, e.encrypted, e.extracted
+func (e *Entry) Archived() (ok bool, encrypted bool, passwordInvalid bool, extracted bool) {
+	return e.archived, e.encrypted, e.passwordInvalid, e.extracted
 }
 
 func (e *Entry) Info() fs.FileInfo {
@@ -64,6 +65,9 @@ var (
 type ExtractHandler func(ctx context.Context, entry *Entry) (err error)
 
 func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err error) {
+	if err = file.Validate(ctx); err != nil {
+		return
+	}
 	encrypted, encryptedErr := file.Encrypted(ctx)
 	if encryptedErr != nil {
 		err = encryptedErr
@@ -204,8 +208,20 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			// fork
 			sub = file.fork(info.NameInArchive, tmpFile)
 		}
-
+		// validate sub
 		if validateErr := sub.Validate(ctx); validateErr != nil {
+			if errors.Is(validateErr, ErrPasswordRequired) || errors.Is(validateErr, ErrPasswordInvalid) {
+				_ = handler(ctx, &Entry{
+					name:            filename,
+					archived:        true,
+					encrypted:       true,
+					passwordInvalid: true,
+					extracted:       false,
+					info:            info.FileInfo,
+					header:          info.Header,
+					reader:          ioutil.NewCompositeByteReader(head, reader),
+				})
+			}
 			err = validateErr
 			return
 		}
