@@ -79,7 +79,7 @@ func (bx *Box) startup(ctx context.Context) {
 			return
 		}
 	}
-	db, dbErr := databases.New(filepath.Join(databaseDirPath, "database.db"), indexes()...)
+	db, dbErr := databases.New(filepath.Join(databaseDirPath, "database.db"), databaseIndexes()...)
 	if dbErr != nil {
 		bx.err = failure.Failed("错误", "无法打开数据库").Wrap(dbErr)
 		return
