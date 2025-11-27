@@ -147,6 +147,7 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			}
 			return
 		}
+
 		// try extract entry
 		if !file.option.Extracted(filename) { // not extract
 			err = handler(ctx, &Entry{
@@ -211,16 +212,20 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 		// validate sub
 		if validateErr := sub.Validate(ctx); validateErr != nil {
 			if errors.Is(validateErr, ErrPasswordRequired) || errors.Is(validateErr, ErrPasswordInvalid) {
-				_ = handler(ctx, &Entry{
+				err = handler(ctx, &Entry{
 					name:            filename,
 					archived:        true,
 					encrypted:       true,
 					passwordInvalid: true,
-					extracted:       false,
+					extracted:       true,
 					info:            info.FileInfo,
 					header:          info.Header,
 					reader:          ioutil.NewCompositeByteReader(head, reader),
 				})
+				if errors.Is(err, ErrSkip) {
+					err = nil
+					return
+				}
 			}
 			err = validateErr
 			return

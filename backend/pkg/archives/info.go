@@ -3,6 +3,7 @@ package archives
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"path/filepath"
 
@@ -142,9 +143,7 @@ func (info *FileInfo) Path() string {
 	parent := info.Parent
 LOOP:
 	if parent != nil {
-		if parent.Parent != nil {
-			items = append(items, parent.Name)
-		}
+		items = append(items, parent.Name)
 		parent = parent.Parent
 		goto LOOP
 	}
@@ -199,6 +198,12 @@ func (file *File) Info(ctx context.Context, preview ...string) (info *FileInfo, 
 				entryPassword = file.option.GetPassword(filename)
 			}
 			info.mountArchiveFile(filename, entryEncrypted, entryPasswordInvalid, entryPassword)
+			if entryPasswordInvalid { // when password invalid then skip
+				err = ErrSkip
+				return
+			}
+			// extract sub entry
+			file.ExtractedEntry(filename)
 			return
 		}
 		var data []byte
@@ -213,5 +218,29 @@ func (file *File) Info(ctx context.Context, preview ...string) (info *FileInfo, 
 		info.mountFile(filename, data)
 		return
 	})
+	if err == nil {
+		entries := info.ArchiveEntries()
+		for _, entry := range entries {
+			if entry.PasswordInvalid {
+				var entryErr error
+				if entry.Password == "" {
+					entryErr = ErrPasswordRequired
+				} else {
+					entryErr = ErrPasswordInvalid
+				}
+				if err == nil {
+					err = FileError{
+						Filename: entry.Path(),
+						Err:      entryErr,
+					}
+				} else {
+					err = errors.Join(err, FileError{
+						Filename: entry.Path(),
+						Err:      entryErr,
+					})
+				}
+			}
+		}
+	}
 	return
 }

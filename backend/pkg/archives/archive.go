@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-var (
-	ErrPasswordRequired = errors.New("password required")
-	ErrPasswordInvalid  = errors.New("password invalid")
-)
-
 type Reader interface {
 	io.ReadSeeker
 	io.ReaderAt

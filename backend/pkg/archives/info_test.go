@@ -31,10 +31,14 @@ func TestFile_Info(t *testing.T) {
 
 	info, infoErr := file.Info(ctx, "*/project.xml")
 	if infoErr != nil {
-		t.Error(infoErr)
-		targets := info.InvalidArchivedEntries()
-		for _, target := range targets {
-			t.Log(target.Path())
+		errs, isPasswordErr := archives.IsPasswordFailed(infoErr)
+		if isPasswordErr {
+			for _, pwdErr := range errs {
+				t.Error(pwdErr)
+				t.Error(pwdErr.Filename, pwdErr.PasswordRequired, pwdErr.PasswordInvalid)
+			}
+		} else {
+			t.Error(infoErr)
 		}
 		t.Log(info.String())
 		return
@@ -53,5 +57,33 @@ func TestMatch(t *testing.T) {
 
 	t.Log(filepath.Match("bbb/project.xml", "foo/project.xml"))
 	t.Log(filepath.Match("777/*/project.xml", "777/555/project.xml"))
+
+}
+
+func TestFileInfo_Path(t *testing.T) {
+	root := &archives.FileInfo{
+		Name:            "foo.zip",
+		IsDir:           false,
+		Archived:        true,
+		Encrypted:       false,
+		Password:        "",
+		PasswordInvalid: false,
+		Parent:          nil,
+		Preview:         nil,
+		Children:        nil,
+	}
+	c11 := &archives.FileInfo{
+		Name:   "foo",
+		IsDir:  true,
+		Parent: root,
+	}
+	root.Children = append(root.Children, c11)
+	c21 := &archives.FileInfo{
+		Name:   "hello.txt",
+		Parent: c11,
+	}
+	c11.Children = append(c11.Children, c21)
+
+	t.Log(c21.Path())
 
 }
