@@ -1,5 +1,5 @@
 import {createHashRouter} from "react-router-dom";
-import Plans from "../Application/Plans";
+import Schemas from "../Application/Schemas";
 import Modules from "../Application/Modules";
 import Settings from "../Application/Settings";
 import Application from "../Application";
@@ -14,8 +14,8 @@ const router = createHashRouter([
         errorElement: <ErrorBoundary/>,
         children: [
             {
-                path: "plans",
-                element: <Plans/>
+                path: "schemas",
+                element: <Schemas/>
             },
             {
                 path: "modules",

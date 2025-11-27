@@ -35,7 +35,7 @@ function getItem(
 }
 
 const items: MenuItem[] = [
-    getItem('方案', 'plans', <ReconciliationOutlined />),
+    getItem('方案', 'schemas', <ReconciliationOutlined />),
     getItem('模组', 'modules', <AppstoreAddOutlined />),
     getItem('工坊', 'workshop', <GiftOutlined />),
     getItem('设置', 'settings', <SettingOutlined/>),
@@ -79,8 +79,8 @@ const Index: React.FC = () => {
             navigate('settings');
             return;
         }
-        state.menuKey = 'plans';
-        navigate('plans');
+        state.menuKey = 'schemas';
+        navigate('schemas');
         return;
     }, [])
 
@@ -102,9 +102,9 @@ const Index: React.FC = () => {
                     theme="dark"
                     selectedKeys={[snap.menuKey]} mode="inline" items={items}
                     onClick={({key}) => {
-                        if (key === "plans") {
-                            state.menuKey = 'plans';
-                            navigate("plans")
+                        if (key === "schemas") {
+                            state.menuKey = 'schemas';
+                            navigate("schemas")
                         } else if (key === "modules") {
                             state.menuKey = 'modules';
                             navigate("modules")
