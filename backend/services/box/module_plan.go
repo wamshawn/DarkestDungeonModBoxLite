@@ -20,18 +20,17 @@ import (
 )
 
 type ImportArchiveFilePassword struct {
-	Path             string                      `json:"path"`
-	Password         string                      `json:"password"`
-	PasswordRequired bool                        `json:"passwordRequired"`
-	PasswordInvalid  bool                        `json:"passwordInvalid"`
-	Children         []ImportArchiveFilePassword `json:"children"`
+	Path     string                      `json:"path"`
+	Password string                      `json:"password"`
+	Invalid  bool                        `json:"invalid"`
+	Children []ImportArchiveFilePassword `json:"children"`
 }
 
 func (p *ImportArchiveFilePassword) String() string {
 	buf := bytes.NewBuffer(nil)
-	buf.WriteString(fmt.Sprintf("Password: %s, required: %t, invalid: %t\n", p.Password, p.PasswordRequired, p.PasswordInvalid))
+	buf.WriteString(fmt.Sprintf("password: %s, invalid: %t\n", p.Password, p.Invalid))
 	for _, child := range p.Children {
-		buf.WriteString(fmt.Sprintf("Password: %s, %s, required: %t, invalid: %t\n", child.Path, child.Password, child.PasswordRequired, child.PasswordInvalid))
+		buf.WriteString(fmt.Sprintf("password: %s, filename: %s, invalid: %t\n", child.Password, child.Path, child.Invalid))
 	}
 	return buf.String()
 }
@@ -86,6 +85,7 @@ func (entry *ImportEntry) String() string {
 type ImportPlan struct {
 	Source   string                  `json:"source"`
 	Archived *ImportArchiveFileStats `json:"archived"`
+	Invalid  bool                    `json:"invalid"`
 	Entries  []ImportEntry           `json:"entries"`
 }
 
@@ -160,9 +160,9 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 	// validate
 	if validateErr := file.Validate(ctx); validateErr != nil {
 		if errors.Is(err, archives.ErrPasswordRequired) {
-			plan.Archived.Password.PasswordRequired = true
+			plan.Archived.Password.Invalid = true
 		} else if errors.Is(err, archives.ErrPasswordInvalid) {
-			plan.Archived.Password.PasswordInvalid = true
+			plan.Archived.Password.Invalid = true
 		} else {
 			err = failure.Failed("导入压缩包失败", "校验 "+param.Filename+" 失败")
 		}
@@ -181,10 +181,10 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 			for i, child := range plan.Archived.Password.Children {
 				if child.Path == passwordErr.Filename {
 					if passwordErr.PasswordRequired {
-						child.PasswordRequired = true
+						child.Invalid = true
 					}
 					if passwordErr.PasswordInvalid {
-						child.PasswordInvalid = true
+						child.Invalid = true
 					}
 					plan.Archived.Password.Children[i] = child
 					matched = true
@@ -193,18 +193,29 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 			}
 			if !matched {
 				plan.Archived.Password.Children = append(plan.Archived.Password.Children, ImportArchiveFilePassword{
-					Path:             passwordErr.Filename,
-					Password:         "",
-					PasswordRequired: passwordErr.PasswordRequired,
-					PasswordInvalid:  passwordErr.PasswordInvalid,
-					Children:         nil,
+					Path:     passwordErr.Filename,
+					Password: "",
+					Invalid:  passwordErr.PasswordInvalid || passwordErr.PasswordRequired,
+					Children: nil,
 				})
 			}
 		}
+		plan.Invalid = true
 		return
 	}
+
 	projectInfos := info.Match("*project.xml")
 	if len(projectInfos) == 0 {
+		for _, invalid := range info.InvalidArchivedEntries() {
+			if invalid.Encrypted {
+				if invalid.Password == "" {
+					err = failure.Failed("导入压缩包失败", "内涵有密码的压缩包").Append("需要密码", invalid.Path())
+				} else if invalid.PasswordInvalid {
+					err = failure.Failed("导入压缩包失败", "内涵有密码的压缩包").Append("密码错误", invalid.Path())
+				}
+			}
+			return
+		}
 		err = failure.Failed("导入压缩包失败", "模组不存在")
 		return
 	}

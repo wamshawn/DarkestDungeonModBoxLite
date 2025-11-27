@@ -12,14 +12,13 @@ func TestMakeModuleImportPlanByArchiveFile(t *testing.T) {
 	param := box.MakeModuleImportPlanParam{
 		Filename: `F:\games\暗黑地牢\test.zip`,
 		ArchiveFilePasswords: box.ImportArchiveFilePassword{
-			Path:             "",
-			Password:         "111",
-			PasswordRequired: false,
-			PasswordInvalid:  false,
+			Path:     "",
+			Password: "111",
+			Invalid:  false,
 			Children: []box.ImportArchiveFilePassword{
 				{
 					Path:     "test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z",
-					Password: "222",
+					Password: "",
 				},
 			},
 		},
@@ -28,6 +27,9 @@ func TestMakeModuleImportPlanByArchiveFile(t *testing.T) {
 	if makeErr != nil {
 		t.Error(makeErr.Error())
 		return
+	}
+	if plan.Invalid {
+		t.Error("Invalid")
 	}
 	//p, _ := json.MarshalIndent(plan, "", "  ")
 	t.Log(plan.String())
