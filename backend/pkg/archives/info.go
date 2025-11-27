@@ -115,8 +115,10 @@ func (info *FileInfo) InvalidArchivedEntries() (targets []*FileInfo) {
 			targets = append(targets, r...)
 		}
 	}
-	if info.Archived && info.Encrypted && info.PasswordInvalid {
-		targets = append(targets, info)
+	if info.Archived && info.Encrypted {
+		if info.Password == "" || info.PasswordInvalid {
+			targets = append(targets, info)
+		}
 		return
 	}
 	return

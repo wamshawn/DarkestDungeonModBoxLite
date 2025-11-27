@@ -149,25 +149,6 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 		}
 
 		// try extract entry
-		if !file.option.Extracted(filename) { // not extract
-			err = handler(ctx, &Entry{
-				name:      filename,
-				archived:  true,
-				encrypted: false,
-				extracted: false,
-				info:      info.FileInfo,
-				header:    info.Header,
-				reader:    ioutil.NewCompositeByteReader(head, reader),
-			})
-			if err != nil {
-				if errors.Is(err, ErrSkip) {
-					err = nil
-				}
-				return
-			}
-			return
-		}
-		// extract
 		var sub *File
 		if info.Size() < 64*1024*1024 { // use memory
 			buf := bytes.NewBuffer(head)
@@ -250,11 +231,13 @@ func (file *File) Extract(ctx context.Context, handler ExtractHandler) (err erro
 			}
 			return
 		}
-		if err = sub.Extract(ctx, handler); err != nil {
-			if errors.Is(err, ErrSkip) {
-				err = nil
+		if file.option.Extracted(filename) { // extract
+			if err = sub.Extract(ctx, handler); err != nil {
+				if errors.Is(err, ErrSkip) {
+					err = nil
+				}
+				return
 			}
-			return
 		}
 		// file <<<
 		return
