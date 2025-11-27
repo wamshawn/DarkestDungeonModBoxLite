@@ -34,6 +34,26 @@ func Encode(filename string) (v string, err error) {
 	return
 }
 
+func EncodeBytes(filename string, src []byte) (v string, err error) {
+	var mimeType string
+	if strings.HasSuffix(strings.ToLower(filename), ".png") {
+		mimeType = "image/png"
+	} else if strings.HasSuffix(strings.ToLower(filename), ".jpg") ||
+		strings.HasSuffix(strings.ToLower(filename), ".jpeg") {
+		mimeType = "image/jpeg"
+	} else if strings.HasSuffix(strings.ToLower(filename), ".gif") {
+		mimeType = "image/gif"
+	} else if strings.HasSuffix(strings.ToLower(filename), ".webp") {
+		mimeType = "image/webp"
+	} else {
+		err = errors.New("unsupported file type")
+		return
+	}
+	base64String := base64.StdEncoding.EncodeToString(src)
+	v = fmt.Sprintf("data:%s;base64,%s", mimeType, base64String)
+	return
+}
+
 func Decode(filename string, encoded string) (v string, err error) {
 	idx := strings.Index(encoded, "data:")
 	if idx == -1 {
