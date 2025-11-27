@@ -15,7 +15,6 @@ func indexes() (v []databases.Index) {
 		databases.CreateIndex("plan_index", "plan:*", buntdb.IndexJSON("index")),
 		databases.CreateIndex("plan_id", "plan:*", buntdb.IndexJSON("id")),
 		// mod
-		databases.CreateIndex("mod_index", "mod:*", buntdb.IndexJSON("index")),
 		databases.CreateIndex("mod_id", "mod:*", buntdb.IndexJSON("id")),
 		databases.CreateIndex("mod_kind", "mod:*", buntdb.IndexJSON("kind")),
 	)
@@ -23,16 +22,22 @@ func indexes() (v []databases.Index) {
 }
 
 const (
-	ClassMod   = "class"
-	SkinMod    = "skin"
-	TrinketMod = "trinket"
+	HeroMod         = "hero"
+	HeroTweaksMod   = "hero_tweaks"
+	HeroSkinsMod    = "hero_skins"
+	TweaksMod       = "tweaks"
+	OverhaulsMod    = "overhauls"
+	TrinketsMod     = "trinkets"
+	MonstersMod     = "monsters"
+	LocalizationMod = "localization"
+	UIMod           = "ui"
 )
 
 type Module struct {
-	Id    string `json:"id"`
-	Kind  string `json:"kind"`
-	Title string `json:"title"`
-	Index uint   `json:"index"`
+	Id        string `json:"id"`
+	PublishId string `json:"publishId"`
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
 }
 
 func (mod *Module) Key() string {
@@ -55,12 +60,12 @@ func (plan *Plan) PrefixKey() string {
 	return fmt.Sprintf("plan:%s:mod:*", plan.Id)
 }
 
-type PlanMod struct {
+type PlanModule struct {
 	PlanId string `json:"planId"`
 	ModId  string `json:"modId"`
 	Index  uint   `json:"index"`
 }
 
-func (pm *PlanMod) Key() string {
-	return fmt.Sprintf("plan:%s:mod:%s", pm.PlanId, pm.ModId)
+func (module *PlanModule) Key() string {
+	return fmt.Sprintf("plan:%s:mod:%s", module.PlanId, module.ModId)
 }

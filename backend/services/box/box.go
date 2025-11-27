@@ -4,21 +4,25 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"DarkestDungeonModBoxLite/backend/pkg/databases"
 	"DarkestDungeonModBoxLite/backend/pkg/failure"
 	"DarkestDungeonModBoxLite/backend/pkg/files"
-	"DarkestDungeonModBoxLite/backend/pkg/tasks"
 )
 
+type Process struct {
+	Id string
+}
+
 type Box struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	manager  *tasks.Manager
-	db       *databases.Database
-	tempFS   *files.DirFS
-	moduleFS *files.DirFS
-	err      error
+	ctx       context.Context
+	cancel    context.CancelFunc
+	db        *databases.Database
+	tempFS    *files.DirFS
+	moduleFS  *files.DirFS
+	processes sync.Map
+	err       error
 }
 
 func (bx *Box) startup(ctx context.Context) {
@@ -64,9 +68,6 @@ func (bx *Box) startup(ctx context.Context) {
 	}
 	bx.tempFS = temp
 
-	// tasks
-	bx.manager = tasks.New()
-
 	// database
 	databaseDirPath := filepath.Join(wd, "database")
 	if exist, _ := files.Exist(databaseDirPath); !exist {
@@ -93,7 +94,6 @@ func (bx *Box) shutdown(_ context.Context) {
 	}
 	bx.cancel()
 	bx.db.Close()
-	bx.manager.Shutdown()
 	return
 }
 
