@@ -25,11 +25,11 @@ func TestFile_Info(t *testing.T) {
 		return
 	}
 	file.SetPassword("111")
-	file.SetEntryPassword(`test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z`, "111")
+	file.SetEntryPassword(`test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z`, "222")
 
 	ctx := context.Background()
 
-	info, infoErr := file.Info(ctx, "*/project.xml")
+	info, infoErr := file.Info(ctx, "*project.xml")
 	if infoErr != nil {
 		errs, isPasswordErr := archives.IsPasswordFailed(infoErr)
 		if isPasswordErr {
