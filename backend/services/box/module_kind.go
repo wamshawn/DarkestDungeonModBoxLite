@@ -38,9 +38,27 @@ func KindOfModule(ctx context.Context, filename string) (kind string, err error)
 		err = failure.Failed("解析模组类型失败", "模组文件错误")
 		return
 	}
-	// hero
+	// hero >>>
+	// new 			新英雄 不在本体里的
+	// hero_skins	纯皮肤
+	// hero_tweaks  重置			存在 *.art.darkest | 存在 anim | 存在
+	/*
+		anim：拥有自己全新的骨骼动画。
+		effects：拥有全新的技能特效。
+		icons：拥有全新的技能图标、状态图标。
+		shared：拥有全新的英雄肖像、地图行走图等。
+		sounds：拥有全新的语音和音效。
+		fx：是特效，无影响
+	*/
 
-	//
+	// hero <<<
+
+	// trinkets >>>
+	/*
+		heroes 里只有 fx，没有其它改动
+		trinkets 存在
+	*/
+	// trinkets <<<
 
 	return
 }

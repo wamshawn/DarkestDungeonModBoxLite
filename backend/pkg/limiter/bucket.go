@@ -28,28 +28,26 @@ type Bucket struct {
 	tokens   int
 }
 
-func (bucket *Bucket) Take(ctx context.Context, n int) (func(), error) {
+func (bucket *Bucket) Take(ctx context.Context, n int) error {
 	if n < 1 {
-		return func() {}, errors.New("n must be greater than zero")
+		return errors.New("n must be greater than zero")
 	}
 	bucket.locker.Lock()
 	defer bucket.locker.Unlock()
 LOOP:
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	remains := bucket.capacity - bucket.tokens
 	if remains >= n {
 		bucket.tokens += n
-		return func() {
-			bucket.release(n)
-		}, nil
+		return nil
 	}
 	time.Sleep(100 * time.Millisecond)
 	goto LOOP
 }
 
-func (bucket *Bucket) release(n int) {
+func (bucket *Bucket) Release(n int) {
 	bucket.locker.Lock()
 	defer bucket.locker.Unlock()
 	bucket.tokens -= n

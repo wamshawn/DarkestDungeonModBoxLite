@@ -9,7 +9,7 @@ const (
 	HeroTweaksMod   = "hero_tweaks"
 	HeroSkinsMod    = "hero_skins"
 	TweaksMod       = "tweaks"
-	OverhaulsMod    = "overhauls"
+	OverhaulsMod    = "overhauls" // 大修
 	TrinketsMod     = "trinkets"
 	MonstersMod     = "monsters"
 	LocalizationMod = "localization"

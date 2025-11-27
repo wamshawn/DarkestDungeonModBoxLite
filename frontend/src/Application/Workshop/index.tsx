@@ -1,4 +1,4 @@
-import {App, Badge, Card, Flex, FloatButton, Spin, Tag} from "antd";
+import {App, Badge, Card, Flex, FloatButton, Row, Space, Spin, Tag} from "antd";
 import {RetweetOutlined, CopyOutlined} from '@ant-design/icons';
 import {proxy} from "valtio/vanilla";
 import {box} from "../../../wailsjs/go/models";
@@ -137,8 +137,8 @@ const Index = () => {
                     }
                     return (
                         <Spin key={`spin_${module.id}`} spinning={item.syncing} size={"small"}>
-                            <Badge.Ribbon color={module.synced ? "cyan" : ""}
-                                          text={module.synced ? "已同步" : "未同步"}>
+                            <Badge.Ribbon color={module.synced ? "" : "cyan"}
+                                          text={module.synced ? `${module.id}` : `(NEW) ${module.id}`}>
                                 <Card
                                     key={i}
                                     hoverable
