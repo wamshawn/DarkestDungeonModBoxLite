@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -44,25 +45,42 @@ func (stats *ImportArchiveFileStats) String() string {
 }
 
 type ImportEntry struct {
-	Chosen     bool          `json:"chosen"`
-	Key        string        `json:"key"`
-	Title      string        `json:"title"`
-	IconBase64 string        `json:"iconBase64"`
-	Filename   string        `json:"filename"`
-	Children   []ImportEntry `json:"children"`
+	Chosen   bool          `json:"chosen"`
+	Key      string        `json:"key"`
+	Filename string        `json:"filename"`
+	Children []ImportEntry `json:"children"`
 }
 
 func (entry *ImportEntry) mountArchiveFileInfo(info *archives.FileInfo, chosen bool) {
 	for _, child := range info.Children {
 		c := ImportEntry{
-			Chosen:     chosen,
-			Key:        strconv.FormatUint(xxhash.Sum64String(child.Path()), 16),
-			IconBase64: "",
-			Filename:   child.Path(),
-			Children:   nil,
+			Chosen:   chosen,
+			Key:      strconv.FormatUint(xxhash.Sum64String(child.Path()), 16),
+			Filename: child.Path(),
+			Children: nil,
 		}
 		if child.IsDir {
 			c.mountArchiveFileInfo(child, chosen)
+		}
+		entry.Children = append(entry.Children, c)
+	}
+}
+
+func (entry *ImportEntry) mountDir(filename string, chosen bool) {
+	items, dirErr := fs.ReadDir(os.DirFS(filename), ".")
+	if dirErr != nil {
+		return
+	}
+	for _, item := range items {
+		itemPath := filepath.ToSlash(filepath.Join(filename, item.Name()))
+		c := ImportEntry{
+			Chosen:   chosen,
+			Key:      strconv.FormatUint(xxhash.Sum64String(itemPath), 16),
+			Filename: itemPath,
+			Children: nil,
+		}
+		if item.IsDir() {
+			c.mountDir(itemPath, chosen)
 		}
 		entry.Children = append(entry.Children, c)
 	}
@@ -75,9 +93,30 @@ func (entry *ImportEntry) String() string {
 	} else {
 		buf.WriteString("[-]")
 	}
-	buf.WriteString(fmt.Sprintf(" [%s] %s > %s \n", entry.Key, entry.Filename, entry.Title))
+	buf.WriteString(fmt.Sprintf(" [%s] %s \n", entry.Key, entry.Filename))
 	for _, child := range entry.Children {
 		buf.WriteString(child.String())
+	}
+	return buf.String()
+}
+
+type ModulePlan struct {
+	Title      string        `json:"title"`
+	IconBase64 string        `json:"iconBase64"`
+	Filename   string        `json:"filename"`
+	IsDir      bool          `json:"isDir"`
+	Entries    []ImportEntry `json:"entries"`
+}
+
+func (module *ModulePlan) String() string {
+	buf := bytes.NewBuffer(nil)
+	if module.IsDir {
+		buf.WriteString(fmt.Sprintf("[DIRECTORY] %s > %s \n", module.Title, module.Filename))
+	} else {
+		buf.WriteString(fmt.Sprintf("[ ARCHIVED] %s > %s \n", module.Title, module.Filename))
+	}
+	for _, entry := range module.Entries {
+		buf.WriteString(entry.String())
 	}
 	return buf.String()
 }
@@ -86,7 +125,7 @@ type ImportPlan struct {
 	Source   string                  `json:"source"`
 	Archived *ImportArchiveFileStats `json:"archived"`
 	Invalid  bool                    `json:"invalid"`
-	Entries  []ImportEntry           `json:"entries"`
+	Modules  []ModulePlan            `json:"modules"`
 }
 
 func (plan *ImportPlan) String() string {
@@ -95,7 +134,7 @@ func (plan *ImportPlan) String() string {
 	if plan.Archived != nil {
 		buf.WriteString(fmt.Sprintf("%s\n", plan.Archived.String()))
 	}
-	for _, entry := range plan.Entries {
+	for _, entry := range plan.Modules {
 		buf.WriteString(fmt.Sprintf("%s\n", entry.String()))
 	}
 	return buf.String()
@@ -143,9 +182,9 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 		return
 	}
 	plan = &ImportPlan{
-		Source:   param.Filename,
+		Source:   filepath.ToSlash(param.Filename),
 		Archived: &ImportArchiveFileStats{},
-		Entries:  nil,
+		Modules:  nil,
 	}
 	if param.ArchiveFilePasswords.Password != "" {
 		plan.Archived.Password.Password = param.ArchiveFilePasswords.Password
@@ -228,13 +267,12 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 			continue
 		}
 		parent := projectInfo.Parent
-		entry := ImportEntry{
-			Chosen:     false,
-			Key:        strconv.FormatUint(xxhash.Sum64String(projectInfo.Path()), 16),
+		module := ModulePlan{
 			Title:      "",
 			IconBase64: "",
-			Filename:   projectInfo.Parent.Path(),
-			Children:   nil,
+			Filename:   filepath.ToSlash(projectInfo.Parent.Path()),
+			IsDir:      false,
+			Entries:    nil,
 		}
 		// project.xml
 		project := ModuleProject{}
@@ -243,7 +281,7 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 			err = failure.Failed("导入压缩包失败", fmt.Sprintf("解析 %s 失败", projectInfo.Path()))
 			return
 		}
-		entry.Title = project.Title
+		module.Title = project.Title
 		gameStruct := GetModuleFileStruct()
 		for _, child := range parent.Children {
 			chosen := false
@@ -251,7 +289,7 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 			switch childName {
 			case "preview_icon.png":
 				if len(child.Preview) > 0 {
-					entry.IconBase64, _ = images.EncodeBytes("preview_icon.png", child.Preview)
+					module.IconBase64, _ = images.EncodeBytes("preview_icon.png", child.Preview)
 					chosen = true
 				}
 				break
@@ -264,28 +302,99 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 				}
 				break
 			}
-
-			c := ImportEntry{
+			entry := ImportEntry{
 				Chosen:   chosen,
 				Key:      strconv.FormatUint(xxhash.Sum64String(child.Path()), 16),
 				Filename: child.Path(),
 				Children: nil,
 			}
 			if child.IsDir {
-				c.mountArchiveFileInfo(child, chosen)
+				entry.mountArchiveFileInfo(child, chosen)
 			}
-			entry.Children = append(entry.Children, c)
+			module.Entries = append(module.Entries, entry)
 		}
-		plan.Entries = append(plan.Entries, entry)
+		plan.Modules = append(plan.Modules, module)
 	}
-	if len(plan.Entries) == 0 {
+	if len(plan.Modules) == 0 {
 		err = failure.Failed("导入压缩包失败", "有效模组存在")
 		return
 	}
 	return
 }
 
-func MakeModuleImportPlanByDir(ctx context.Context, param MakeModuleImportPlanParam) (plan *ImportPlan, err error) {
+func MakeModuleImportPlanByDir(_ context.Context, param MakeModuleImportPlanParam) (plan *ImportPlan, err error) {
+	dir := os.DirFS(param.Filename)
+	// project.xml
+	projectBytes, readProjectErr := fs.ReadFile(dir, "project.xml")
+	if readProjectErr != nil {
+		if os.IsNotExist(readProjectErr) {
+			err = failure.Failed("导入压缩包失败", fmt.Sprintf("%s 内缺失 project.xml", param.Filename))
+			return
+		}
+		err = failure.Failed("导入压缩包失败", fmt.Sprintf("读取 %s 中 project.xml 失败", param.Filename))
+		return
+	}
+	project := ModuleProject{}
+	projectErr := xml.Unmarshal(projectBytes, &project)
+	if projectErr != nil {
+		err = failure.Failed("导入压缩包失败", fmt.Sprintf("解析 %s 失败", filepath.Join(param.Filename, "project.xml")))
+		return
+	}
+	// icon
+	iconBytes, readIconErr := fs.ReadFile(dir, "preview_icon.png")
+	if readIconErr != nil {
+		if os.IsNotExist(readIconErr) {
+			err = failure.Failed("导入压缩包失败", fmt.Sprintf("%s 内缺失 preview_icon.png", param.Filename))
+			return
+		}
+		err = failure.Failed("导入压缩包失败", fmt.Sprintf("读取 %s 中 preview_icon.png 失败", param.Filename))
+		return
+	}
+	iconBase64, iconBase64Err := images.EncodeBytes("preview_icon.png", iconBytes)
+	if iconBase64Err != nil {
+		err = failure.Failed("导入压缩包失败", fmt.Sprintf("解析 %s 失败", filepath.Join(param.Filename, "preview_icon.png")))
+		return
+	}
 
+	entries, dirErr := fs.ReadDir(dir, ".")
+	if dirErr != nil {
+		err = failure.Failed("导入压缩包失败", fmt.Sprintf("读取 %s 失败", param.Filename))
+		return
+	}
+
+	module := ModulePlan{
+		Title:      project.Title,
+		IconBase64: iconBase64,
+		Filename:   filepath.ToSlash(param.Filename),
+		IsDir:      true,
+		Entries:    nil,
+	}
+
+	gameStruct := GetModuleFileStruct()
+	for _, item := range entries {
+		chosen := false
+		for _, structure := range gameStruct.Children {
+			if structure.Name == item.Name() {
+				chosen = true
+				break
+			}
+		}
+		itemPath := filepath.ToSlash(filepath.Join(param.Filename, item.Name()))
+		entry := ImportEntry{
+			Chosen:   chosen,
+			Key:      strconv.FormatUint(xxhash.Sum64String(itemPath), 16),
+			Filename: itemPath,
+			Children: nil,
+		}
+		if item.IsDir() {
+			entry.mountDir(itemPath, chosen)
+		}
+		module.Entries = append(module.Entries, entry)
+	}
+	plan = &ImportPlan{
+		Source:   filepath.ToSlash(param.Filename),
+		Archived: &ImportArchiveFileStats{},
+		Modules:  []ModulePlan{module},
+	}
 	return
 }
