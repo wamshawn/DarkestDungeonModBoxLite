@@ -155,7 +155,7 @@ const Index = () => {
                                 >
                                     <Meta title={module.title}
                                           description={<Flex wrap gap="small">{tags.map((tag) => (
-                                              <Tag bordered={false} color="cyan">{tag}</Tag>
+                                              <Tag variant="filled" color="cyan">{tag}</Tag>
                                           ))}</Flex>}/>
                                 </Card>
                             </Badge.Ribbon>
@@ -172,7 +172,6 @@ const Index = () => {
                 onClick={async () => { await reflush() }}
             />
         </Flex>
-
     );
 };
 
