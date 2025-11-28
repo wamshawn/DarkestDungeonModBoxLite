@@ -1,4 +1,4 @@
-import {App, Badge, Card, Flex, FloatButton, Row, Space, Spin, Tag} from "antd";
+import {App, Badge, Card, Flex, FloatButton, Spin, Tag} from "antd";
 import {RetweetOutlined, CopyOutlined} from '@ant-design/icons';
 import {proxy} from "valtio/vanilla";
 import {box} from "../../../wailsjs/go/models";
@@ -48,7 +48,7 @@ const Index = () => {
 
     const reflush = async () => {
         if (state.syncing.processing) {
-            notification.warning({message:"警告", description: "请等待同步结束", placement: "bottomRight", duration: 3000})
+            notification.warning({title:"警告", description: "请等待同步结束", placement: "bottomRight", duration: 3000})
             return;
         }
         state.modules = new Array<WorkshopModule>();
@@ -62,7 +62,7 @@ const Index = () => {
             const errs = r.cause()
             for (let i = 0; i < errs.length; i++) {
                 notification.error({
-                    message: errs[i].error,
+                    title: errs[i].error,
                     description: errs[i].description,
                     placement: "bottomRight",
                     role: "alert"
@@ -85,7 +85,7 @@ const Index = () => {
 
     const syncing = async () => {
         if (state.modules.length == 0) {
-            notification.warning({message:"同步", description: "无新模组待同步", placement: "bottomRight", duration: 3000})
+            notification.warning({title:"同步", description: "无新模组待同步", placement: "bottomRight", duration: 3000})
             return;
         }
         state.modules.forEach((item) => {
@@ -95,7 +95,7 @@ const Index = () => {
             }
         })
         if (state.syncing.total === 0) {
-            notification.warning({message:"同步", description: "无新模组待同步", placement: "bottomRight", duration: 3000})
+            notification.warning({title:"同步", description: "无新模组待同步", placement: "bottomRight", duration: 3000})
             return;
         }
         state.syncing.processing = true;

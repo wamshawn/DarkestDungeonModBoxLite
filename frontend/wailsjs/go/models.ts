@@ -213,6 +213,7 @@ export namespace box {
 	    publishId: string;
 	    kind: string;
 	    title: string;
+	    filename: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Module(source);
@@ -224,6 +225,7 @@ export namespace box {
 	        this.publishId = source["publishId"];
 	        this.kind = source["kind"];
 	        this.title = source["title"];
+	        this.filename = source["filename"];
 	    }
 	}
 	

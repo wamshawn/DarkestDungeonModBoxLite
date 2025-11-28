@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,10 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-buddy/ide-toolbox": "^2.4.0",
-    "@react-buddy/palette-antd": "^5.3.0",
+    "@ant-design/icons": "^5.6.1",
     "ahooks": "^3.9.6",
-    "antd": "^5.29.0",
+    "antd": "^6.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.2",

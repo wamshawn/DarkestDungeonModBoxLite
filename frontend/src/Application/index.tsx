@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React from "react";
 import {
     ReconciliationOutlined,
     AppstoreAddOutlined,
@@ -6,7 +6,7 @@ import {
     GiftOutlined,
 } from '@ant-design/icons';
 
-import {Outlet, useLocation, useNavigate} from "react-router-dom";
+import {Outlet, useNavigate} from "react-router-dom";
 import {App, Layout, Menu, MenuProps, Spin} from 'antd';
 import {useAsyncEffect} from "ahooks";
 import {proxy} from "valtio/vanilla";
@@ -14,8 +14,7 @@ import {useSnapshot} from "valtio/react";
 import {rpc} from "../../wailsjs/rpc/rpc";
 import {Open} from "../../wailsjs/go/box/Box";
 import {box} from "../../wailsjs/go/models";
-import {WindowMaximise} from "../../wailsjs/runtime";
-const { Header, Content, Sider } = Layout;
+const { Content, Sider } = Layout;
 
 
 type MenuItem = Required<MenuProps>['items'][number];
@@ -64,7 +63,7 @@ const Index: React.FC = () => {
             const errs = r.cause()
             for (let i = 0; i < errs.length; i++) {
                 notification.error({
-                    message: errs[i].error,
+                    title: errs[i].error,
                     description: errs[i].description,
                     placement: "bottomRight",
                     role: "alert"
