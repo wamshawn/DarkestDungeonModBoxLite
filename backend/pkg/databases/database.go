@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -317,12 +318,13 @@ func (db *Database) Range(index string, beg uint, end uint, values any) (err err
 	return
 }
 
-func (db *Database) GetImage(filename string) (v string, err error) {
+func (db *Database) GetImage(filename string, ttl time.Duration) (v string, err error) {
 	filename = strings.TrimSpace(filename)
 	if filename == "" {
 		err = errors.New("filename is empty")
 		return
 	}
+	filename = filepath.ToSlash(filepath.Clean(filename))
 	tx, txErr := db.kv.Begin(true)
 	if txErr != nil {
 		err = txErr
@@ -347,13 +349,37 @@ func (db *Database) GetImage(filename string) (v string, err error) {
 	}
 	_, _, setErr := tx.Set(key, v, &buntdb.SetOptions{
 		Expires: true,
-		TTL:     15 * 24 * time.Hour,
+		TTL:     ttl,
 	})
 	if setErr != nil {
 		_ = tx.Rollback()
 		return
 	}
 	_ = tx.Commit()
+	return
+}
+
+func (db *Database) RemoveImage(filename string) (err error) {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return
+	}
+	filename = filepath.ToSlash(filepath.Clean(filename))
+	id := xxhash.Sum64String(filename)
+	key := fmt.Sprintf("images:%s", strconv.FormatUint(id, 16))
+	tx, txErr := db.kv.Begin(true)
+	if txErr != nil {
+		err = txErr
+		return
+	}
+	if _, err = tx.Delete(key); err != nil {
+		if errors.Is(err, buntdb.ErrNotFound) {
+			err = nil
+		}
+		_ = tx.Rollback()
+		return
+	}
+	err = tx.Commit()
 	return
 }
 

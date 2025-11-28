@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"time"
 
+	"DarkestDungeonModBoxLite/backend/pkg/databases"
 	"DarkestDungeonModBoxLite/backend/pkg/failure"
 	"DarkestDungeonModBoxLite/backend/pkg/files"
 )
@@ -31,6 +33,12 @@ type WorkshopModule struct {
 }
 
 func (bx *Box) ListWorkshopModules() (v []WorkshopModule, err error) {
+	var (
+		db *databases.Database
+	)
+	if db, err = bx.database(); err != nil {
+		return
+	}
 	settings, settingsErr := bx.Settings()
 	if settingsErr != nil {
 		err = failure.Failed("工坊", "扫描本地存储错误").Wrap(settingsErr)
@@ -82,6 +90,7 @@ func (bx *Box) ListWorkshopModules() (v []WorkshopModule, err error) {
 		icon := project.PreviewIconFile
 		if icon != "" {
 			icon = filepath.Join(sub.Path(), icon)
+			_, _ = db.GetImage(icon, 15*24*time.Hour)
 		}
 		v = append(v, WorkshopModule{
 			Id:     project.PublishedFileId,

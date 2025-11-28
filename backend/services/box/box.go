@@ -9,7 +9,6 @@ import (
 	"DarkestDungeonModBoxLite/backend/pkg/databases"
 	"DarkestDungeonModBoxLite/backend/pkg/failure"
 	"DarkestDungeonModBoxLite/backend/pkg/files"
-	"DarkestDungeonModBoxLite/backend/pkg/limiter"
 )
 
 type Process struct {
@@ -17,14 +16,13 @@ type Process struct {
 }
 
 type Box struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	db           *databases.Database
-	imagesBucket *limiter.Bucket
-	tempFS       *files.DirFS
-	moduleFS     *files.DirFS
-	processes    sync.Map
-	err          error
+	ctx       context.Context
+	cancel    context.CancelFunc
+	db        *databases.Database
+	tempFS    *files.DirFS
+	moduleFS  *files.DirFS
+	processes sync.Map
+	err       error
 }
 
 func (bx *Box) startup(ctx context.Context) {
@@ -39,8 +37,6 @@ func (bx *Box) startup(ctx context.Context) {
 		bx.err = failure.Failed("错误", "无法获取当前运行位置").Wrap(wdErr)
 		return
 	}
-	// images bucket
-	bx.imagesBucket = limiter.NewBucket(0)
 	// mods
 	moduleDirPath := filepath.Join(wd, "mods")
 	if exist, _ := files.Exist(moduleDirPath); !exist {
