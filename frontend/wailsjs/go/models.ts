@@ -103,6 +103,9 @@ export namespace box {
 		}
 	}
 	export class ModulePlan {
+	    existed: boolean;
+	    kind: string;
+	    publishFileId: string;
 	    title: string;
 	    iconBase64: string;
 	    filename: string;
@@ -115,6 +118,9 @@ export namespace box {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.existed = source["existed"];
+	        this.kind = source["kind"];
+	        this.publishFileId = source["publishFileId"];
 	        this.title = source["title"];
 	        this.iconBase64 = source["iconBase64"];
 	        this.filename = source["filename"];

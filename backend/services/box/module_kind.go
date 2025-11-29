@@ -1,64 +1,151 @@
 package box
 
 import (
-	"context"
-	"encoding/xml"
-	"io/fs"
-	"os"
-	"path/filepath"
+	"fmt"
 	"strings"
 
-	"DarkestDungeonModBoxLite/backend/pkg/failure"
+	"DarkestDungeonModBoxLite/backend/pkg/files"
 )
 
-func KindOfModule(ctx context.Context, filename string) (kind string, err error) {
-	filename = strings.TrimSpace(filename)
-	if filename == "" {
-		err = failure.Failed("解析模组类型失败", "模组位置缺失")
-		return
-	}
-	stat, statErr := os.Stat(filename)
-	if statErr != nil {
-		err = failure.Failed("解析模组类型失败", "模组文件错误")
-		return
-	}
-	if !stat.IsDir() {
-		err = failure.Failed("解析模组类型失败", "模组文件错误")
-		return
+func GetKindOfModuleByFileStructure(st files.Structure) (kind string) {
+	// heroes
+	heroDirNum := 0
+	if heroes, hasHeroes := st.Get("heroes"); hasHeroes {
+		heroDirNum = len(heroes.Children)
+		if heroDirNum == 1 {
+			name := heroes.Children[0].Name
+			skinOnly := true
+			for _, child := range heroes.Children[0].Children {
+				if !strings.HasPrefix(child.Name, fmt.Sprintf("%s_", name)) {
+					skinOnly = false
+					break
+				}
+			}
+			if skinOnly {
+				kind = HeroSkinsMod
+				return
+			}
+			if _, builtin := builtinHeroes[name]; builtin {
+				kind = HeroTweaksMod
+				return
+			}
+			kind = HeroNewMod
+			return
+		}
 	}
 
-	filename = filepath.ToSlash(filepath.Clean(filename))
-	projectBytes, projectReadErr := fs.ReadFile(os.DirFS(filename), "project.xml")
-	if projectReadErr != nil {
-		err = failure.Failed("解析模组类型失败", "模组文件错误")
+	// trinkets
+	if _, hasTrinkets := st.Get("trinkets"); hasTrinkets {
+		if _, hasPanels := st.Get("panels/icons_equip/trinket"); hasPanels {
+			kind = TrinketsMod
+			return
+		}
+	}
+	// others
+	tweaks := 0
+	ui := 0
+	monsters := 0
+	localization := 0
+	for _, child := range st.Children {
+		switch child.Name {
+		case "activity_log", "colours", "cursors", "dungeons", "fe_flow", "fonts",
+			"fx", "game_over", "loading_screen", "overlays", "panels", "scrolls":
+			ui++
+			break
+		case "curios", "effects", "inventory", "loot", "maps", "modes",
+			"props", "scripts", "upgrades":
+			tweaks++
+			break
+		case "campaign":
+			for _, entry := range child.Children {
+				switch entry.Name {
+				case "estate", "heirloom_exchange", "progression", "provision", "quest", "roster", "town_events":
+					if len(child.Children) > 0 {
+						tweaks++
+					}
+					break
+				case "town":
+					ui++
+					break
+				default:
+					break
+				}
+			}
+			break
+		case "dlc":
+			if child.OnlyFilesByExt(".png") {
+				ui++
+			} else {
+				tweaks++
+			}
+			break
+		case "raid":
+			for _, entry := range child.Children {
+				switch entry.Name {
+				case "ai":
+					tweaks++
+					break
+				case "camping":
+					for _, camping := range entry.Children {
+						switch camping.Name {
+						case "default.camping_skills.json":
+							tweaks++
+							break
+						case "skill_icons":
+							if len(camping.Children) > 0 {
+								ui++
+							}
+							break
+						}
+					}
+					break
+				case "skill_attributes":
+					ui++
+					break
+				default:
+					break
+				}
+			}
+			break
+		case "raid_results":
+			for _, entry := range child.Children {
+				switch entry.Name {
+				case "raid_results.layout.darkest":
+					tweaks++
+					break
+				default:
+					ui++
+					break
+				}
+			}
+			break
+		case "monsters":
+			monsters++
+			break
+		case "localization":
+			localization++
+			break
+		default:
+			// shared ???
+			break
+		}
+	}
+	if tweaks == 0 {
+		if monsters > 0 {
+			kind = MonstersMod
+			return
+		}
+		if localization > 0 {
+			kind = LocalizationMod
+			return
+		}
+		if ui > 0 {
+			kind = UIMod
+			return
+		}
+		kind = UnknownMod
 		return
 	}
-	project := ModuleProject{}
-	if decodeErr := xml.Unmarshal(projectBytes, &project); decodeErr != nil {
-		err = failure.Failed("解析模组类型失败", "模组文件错误")
-		return
-	}
-	// hero >>>
-	// new 			新英雄 不在本体里的
-	// hero_skins	纯皮肤
-	// hero_tweaks  重置			存在 *.art.darkest | 存在 anim | 存在
-	/*
-		anim：拥有自己全新的骨骼动画。
-		effects：拥有全新的技能特效。
-		icons：拥有全新的技能图标、状态图标。
-		shared：拥有全新的英雄肖像、地图行走图等。
-		sounds：拥有全新的语音和音效。
-		fx：是特效，无影响
-	*/
-
-	// hero <<<
-
-	// trinkets >>>
-	/*
-		heroes 里只有 fx，没有其它改动
-		trinkets 存在
-	*/
-	// trinkets <<<
-
+	kind = GameplayTweaksMod
 	return
 }

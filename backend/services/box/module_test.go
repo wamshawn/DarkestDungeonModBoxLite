@@ -2,6 +2,7 @@ package box_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	"DarkestDungeonModBoxLite/backend/services/box"
@@ -10,17 +11,17 @@ import (
 func TestMakeModuleImportPlanByArchiveFile(t *testing.T) {
 	ctx := context.Background()
 	param := box.MakeModuleImportPlanParam{
-		Filename: `F:\games\暗黑地牢\test.zip`,
+		Filename: `F:\games\暗黑地牢\tests\montsers\3500984490.7z`,
 		ArchiveFilePasswords: box.ImportArchiveFilePassword{
 			Path:     "",
 			Password: "111",
 			Invalid:  false,
-			Children: []box.ImportArchiveFilePassword{
-				{
-					Path:     "test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z",
-					Password: "222",
-				},
-			},
+			//Children: []box.ImportArchiveFilePassword{
+			//	{
+			//		Path:     "test.zip/test/foo.7z/foo/ZIMIK Arbalest skin.7z",
+			//		Password: "222",
+			//	},
+			//},
 		},
 	}
 	plan, makeErr := box.MakeModuleImportPlanByArchiveFile(ctx, param)
@@ -37,7 +38,7 @@ func TestMakeModuleImportPlanByArchiveFile(t *testing.T) {
 func TestMakeModuleImportPlanByDir(t *testing.T) {
 	ctx := context.Background()
 	param := box.MakeModuleImportPlanParam{
-		Filename: `F:\games\暗黑地牢\test_out\Arbalest`,
+		Filename: `F:\games\steam\steamapps\workshop\content\262060\3440075069`,
 	}
 	plan, makeErr := box.MakeModuleImportPlanByDir(ctx, param)
 	if makeErr != nil {
@@ -48,4 +49,17 @@ func TestMakeModuleImportPlanByDir(t *testing.T) {
 		t.Error("Invalid")
 	}
 	t.Log(plan.String())
+}
+
+func TestModuleId(t *testing.T) {
+	ids := make([]string, 0, 8)
+	ids = append(ids, "2106165672", "2836305813", "2852433413")
+	for i := 0; i < 5; i++ {
+		ids = append(ids, box.Id())
+	}
+
+	sort.Strings(ids)
+
+	t.Log(ids)
+
 }

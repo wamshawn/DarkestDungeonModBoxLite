@@ -86,6 +86,28 @@ func (entry *ImportEntry) mountDir(filename string, chosen bool) {
 	}
 }
 
+func (entry *ImportEntry) FileStructure() (st files.Structure, err error) {
+	if entry.Filename == "" {
+		err = errors.New("entry is empty")
+		return
+	}
+	_, file := filepath.Split(entry.Filename)
+	st = files.Structure{
+		Name:     file,
+		IsDir:    len(entry.Children) > 0,
+		Children: nil,
+	}
+	for _, child := range entry.Children {
+		cst, cstErr := child.FileStructure()
+		if cstErr != nil {
+			err = cstErr
+			return
+		}
+		st.Children = append(st.Children, cst)
+	}
+	return
+}
+
 func (entry *ImportEntry) String() string {
 	buf := bytes.NewBuffer(nil)
 	if entry.Chosen {
@@ -101,19 +123,38 @@ func (entry *ImportEntry) String() string {
 }
 
 type ModulePlan struct {
-	Title      string        `json:"title"`
-	IconBase64 string        `json:"iconBase64"`
-	Filename   string        `json:"filename"`
-	IsDir      bool          `json:"isDir"`
-	Entries    []ImportEntry `json:"entries"`
+	Existed       bool          `json:"existed"`
+	Kind          string        `json:"kind"`
+	PublishFileId string        `json:"publishFileId"`
+	Title         string        `json:"title"`
+	IconBase64    string        `json:"iconBase64"`
+	Filename      string        `json:"filename"`
+	IsDir         bool          `json:"isDir"`
+	Entries       []ImportEntry `json:"entries"`
+}
+
+func (module *ModulePlan) FileStructure() (st files.Structure, err error) {
+	st.Name, _ = filepath.Split(module.Filename)
+	st.IsDir = true
+	for _, entry := range module.Entries {
+		cst, cstErr := entry.FileStructure()
+		if cstErr != nil {
+			err = cstErr
+			return
+		}
+		st.Children = append(st.Children, cst)
+	}
+	return
 }
 
 func (module *ModulePlan) String() string {
 	buf := bytes.NewBuffer(nil)
 	if module.IsDir {
-		buf.WriteString(fmt.Sprintf("[DIRECTORY] %s > %s \n", module.Title, module.Filename))
+		buf.WriteString(fmt.Sprintf("[DIRECTORY][id: %s][kind: %s][existed: %t][title: %s][file: %s] \n",
+			module.PublishFileId, module.Kind, module.Existed, module.Title, module.Filename))
 	} else {
-		buf.WriteString(fmt.Sprintf("[ ARCHIVED] %s > %s \n", module.Title, module.Filename))
+		buf.WriteString(fmt.Sprintf("[ ARCHIVED][id: %s][kind: %s][existed: %t][title: %s][file: %s] \n",
+			module.PublishFileId, module.Kind, module.Existed, module.Title, module.Filename))
 	}
 	for _, entry := range module.Entries {
 		buf.WriteString(entry.String())
@@ -164,6 +205,20 @@ func (bx *Box) MakeModuleImportPlan(param MakeModuleImportPlanParam) (plan *Impo
 		plan, err = MakeModuleImportPlanByDir(bx.ctx, param)
 	} else {
 		plan, err = MakeModuleImportPlanByArchiveFile(bx.ctx, param)
+	}
+	if plan != nil {
+		// check existed
+		for i, module := range plan.Modules {
+			if module.PublishFileId != "" {
+				existed, existsErr := bx.ExistsModule(module.PublishFileId)
+				if existsErr != nil {
+					err = failure.Failed("创建模组导入计划失败", "判断模组是否存在错误").Wrap(existsErr)
+					return
+				}
+				module.Existed = existed
+				plan.Modules[i] = module
+			}
+		}
 	}
 	return
 }
@@ -262,12 +317,16 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 		if projectInfo.Parent == nil {
 			continue
 		}
+		if projectInfo.Name != "project.xml" {
+			continue
+		}
 		preview := projectInfo.Preview
 		if len(preview) == 0 {
 			continue
 		}
 		parent := projectInfo.Parent
 		module := ModulePlan{
+			Kind:       "",
 			Title:      "",
 			IconBase64: "",
 			Filename:   filepath.ToSlash(projectInfo.Parent.Path()),
@@ -281,6 +340,7 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 			err = failure.Failed("导入压缩包失败", fmt.Sprintf("解析 %s 失败", projectInfo.Path()))
 			return
 		}
+		module.PublishFileId = strings.TrimSpace(project.PublishedFileId)
 		module.Title = project.Title
 		gameStruct := GetModuleFileStruct()
 		for _, child := range parent.Children {
@@ -312,6 +372,38 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 				entry.mountArchiveFileInfo(child, chosen)
 			}
 			module.Entries = append(module.Entries, entry)
+		}
+		// get kind
+		for _, tag := range project.Tags.Tags {
+			tag = strings.TrimSpace(tag)
+			tag = strings.ToLower(tag)
+			switch tag {
+			case "overhauls":
+				module.Kind = OverhaulsMod
+				break
+			case "monsters":
+				module.Kind = MonstersMod
+				break
+			case "localization":
+				module.Kind = LocalizationMod
+				break
+			case "ui":
+				module.Kind = UIMod
+				break
+			default:
+				break
+			}
+			if module.Kind != "" {
+				break
+			}
+		}
+		if module.Kind == "" {
+			if st, stErr := module.FileStructure(); stErr == nil {
+				module.Kind = GetKindOfModuleByFileStructure(st)
+				if module.Kind == "" {
+					module.Kind = UnknownMod
+				}
+			}
 		}
 		plan.Modules = append(plan.Modules, module)
 	}
@@ -363,11 +455,14 @@ func MakeModuleImportPlanByDir(_ context.Context, param MakeModuleImportPlanPara
 	}
 
 	module := ModulePlan{
-		Title:      project.Title,
-		IconBase64: iconBase64,
-		Filename:   filepath.ToSlash(param.Filename),
-		IsDir:      true,
-		Entries:    nil,
+		Existed:       false,
+		Kind:          "",
+		PublishFileId: strings.TrimSpace(project.PublishedFileId),
+		Title:         project.Title,
+		IconBase64:    iconBase64,
+		Filename:      filepath.ToSlash(param.Filename),
+		IsDir:         true,
+		Entries:       nil,
 	}
 
 	gameStruct := GetModuleFileStruct()
@@ -391,6 +486,39 @@ func MakeModuleImportPlanByDir(_ context.Context, param MakeModuleImportPlanPara
 		}
 		module.Entries = append(module.Entries, entry)
 	}
+	// get kind
+	for _, tag := range project.Tags.Tags {
+		tag = strings.TrimSpace(tag)
+		tag = strings.ToLower(tag)
+		switch tag {
+		case "overhauls":
+			module.Kind = OverhaulsMod
+			break
+		case "monsters":
+			module.Kind = MonstersMod
+			break
+		case "localization":
+			module.Kind = LocalizationMod
+			break
+		case "ui":
+			module.Kind = UIMod
+			break
+		default:
+			break
+		}
+		if module.Kind != "" {
+			break
+		}
+	}
+	if module.Kind == "" {
+		if st, stErr := module.FileStructure(); stErr == nil {
+			module.Kind = GetKindOfModuleByFileStructure(st)
+			if module.Kind == "" {
+				module.Kind = UnknownMod
+			}
+		}
+	}
+
 	plan = &ImportPlan{
 		Source:   filepath.ToSlash(param.Filename),
 		Archived: &ImportArchiveFileStats{},

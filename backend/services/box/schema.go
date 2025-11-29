@@ -13,19 +13,19 @@ func ReverseSortSchemaByCreateAT(schemas []Schema) {
 	slices.Reverse[[]Schema](schemas)
 }
 
+func schemaKey(id string) string {
+	return fmt.Sprintf("schema:%s", id)
+}
+
+func schemaModulesKey(id string) string {
+	return fmt.Sprintf("schema:%s:mod:*", id)
+}
+
 type Schema struct {
 	Id       string    `json:"id"`
 	Name     string    `json:"name"`
 	Deployed bool      `json:"deployed"`
 	CreateAT time.Time `json:"createAT"`
-}
-
-func (schema *Schema) Key() string {
-	return fmt.Sprintf("schema:%s", schema.Id)
-}
-
-func (schema *Schema) PrefixKey() string {
-	return fmt.Sprintf("schema:%s:mod:*", schema.Id)
 }
 
 type SchemaModule struct {
