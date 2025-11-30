@@ -2,6 +2,7 @@ package box
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -73,7 +74,7 @@ func (module *Module) Add(vm VersionedModule) {
 		return a.Version.Compare(b.Version)
 	})
 	module.Version = module.Versions[len(module.Versions)-1].Version
-	module.PreviewIconFile = module.Versions[len(module.Versions)-1].PreviewIconFile
+	module.PreviewIconFile = filepath.ToSlash(filepath.Join(module.Id, module.Version.String(), module.Versions[len(module.Versions)-1].PreviewIconFile))
 }
 
 func (module *Module) ExistVersion(target Version) (idx int, ok bool) {
