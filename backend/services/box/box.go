@@ -19,7 +19,6 @@ type Box struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	db        *databases.Database
-	tempFS    *files.DirFS
 	moduleFS  *files.DirFS
 	processes sync.Map
 	err       error
@@ -51,21 +50,6 @@ func (bx *Box) startup(ctx context.Context) {
 		return
 	}
 	bx.moduleFS = module
-
-	// temp
-	tempDirPath := filepath.Join(moduleDirPath, ".tmp")
-	if exist, _ := files.Exist(tempDirPath); !exist {
-		if err := files.Mkdir(tempDirPath); err != nil {
-			bx.err = failure.Failed("错误", "无法创建目录").Append("位置", tempDirPath).Wrap(err)
-			return
-		}
-	}
-	temp, tempErr := files.NewDirFS(tempDirPath)
-	if tempErr != nil {
-		bx.err = failure.Failed("错误", "无法加载零时目录").Append("位置", tempDirPath).Wrap(tempErr)
-		return
-	}
-	bx.tempFS = temp
 
 	// database
 	databaseDirPath := filepath.Join(wd, "database")

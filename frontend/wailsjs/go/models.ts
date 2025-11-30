@@ -102,6 +102,91 @@ export namespace box {
 		    return a;
 		}
 	}
+	export class VersionedModule {
+	    version: Version;
+	    previewIconFile: string;
+	    updateDetails: string;
+	    itemDescriptionShort: string;
+	    itemDescription: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionedModule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = this.convertValues(source["version"], Version);
+	        this.previewIconFile = source["previewIconFile"];
+	        this.updateDetails = source["updateDetails"];
+	        this.itemDescriptionShort = source["itemDescriptionShort"];
+	        this.itemDescription = source["itemDescription"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Module {
+	    id: string;
+	    publishId: string;
+	    kind: string;
+	    title: string;
+	    remark: string;
+	    // Go type: time
+	    modifyAT: any;
+	    previewIconFile: string;
+	    version: Version;
+	    versions: VersionedModule[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Module(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.publishId = source["publishId"];
+	        this.kind = source["kind"];
+	        this.title = source["title"];
+	        this.remark = source["remark"];
+	        this.modifyAT = this.convertValues(source["modifyAT"], null);
+	        this.previewIconFile = source["previewIconFile"];
+	        this.version = this.convertValues(source["version"], Version);
+	        this.versions = this.convertValues(source["versions"], VersionedModule);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Version {
 	    major: number;
 	    minor: number;
@@ -128,6 +213,7 @@ export namespace box {
 	    filename: string;
 	    isDir: boolean;
 	    entries: ImportEntry[];
+	    similar: Module[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ModulePlan(source);
@@ -144,6 +230,7 @@ export namespace box {
 	        this.filename = source["filename"];
 	        this.isDir = source["isDir"];
 	        this.entries = this.convertValues(source["entries"], ImportEntry);
+	        this.similar = this.convertValues(source["similar"], Module);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -232,91 +319,7 @@ export namespace box {
 		    return a;
 		}
 	}
-	export class VersionedModule {
-	    version: Version;
-	    previewIconFile: string;
-	    updateDetails: string;
-	    itemDescriptionShort: string;
-	    itemDescription: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new VersionedModule(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.version = this.convertValues(source["version"], Version);
-	        this.previewIconFile = source["previewIconFile"];
-	        this.updateDetails = source["updateDetails"];
-	        this.itemDescriptionShort = source["itemDescriptionShort"];
-	        this.itemDescription = source["itemDescription"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class Module {
-	    id: string;
-	    publishId: string;
-	    kind: string;
-	    title: string;
-	    remark: string;
-	    // Go type: time
-	    modifyAT: any;
-	    previewIconFile: string;
-	    version: Version;
-	    versions: VersionedModule[];
-	
-	    static createFrom(source: any = {}) {
-	        return new Module(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.publishId = source["publishId"];
-	        this.kind = source["kind"];
-	        this.title = source["title"];
-	        this.remark = source["remark"];
-	        this.modifyAT = this.convertValues(source["modifyAT"], null);
-	        this.previewIconFile = source["previewIconFile"];
-	        this.version = this.convertValues(source["version"], Version);
-	        this.versions = this.convertValues(source["versions"], VersionedModule);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	
 	export class Settings {
 	    game: string;

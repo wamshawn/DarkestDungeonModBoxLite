@@ -2,10 +2,15 @@ package box_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"testing"
+	"time"
 
 	"DarkestDungeonModBoxLite/backend/services/box"
+
+	"github.com/tidwall/buntdb"
 )
 
 func TestMakeModuleImportPlanByArchiveFile(t *testing.T) {
@@ -61,5 +66,80 @@ func TestModuleId(t *testing.T) {
 	sort.Strings(ids)
 
 	t.Log(ids)
+
+}
+
+func TestDBList(t *testing.T) {
+	db, dbErr := buntdb.Open(":memory:")
+	if dbErr != nil {
+		t.Error(dbErr)
+		return
+	}
+	defer db.Close()
+
+	setErr := db.Update(func(tx *buntdb.Tx) error {
+		for i := 0; i < 10; i++ {
+			module := box.Module{
+				Id:              fmt.Sprintf("%d", i),
+				PublishId:       fmt.Sprintf("%d", i),
+				Kind:            "-",
+				Title:           "foo",
+				Remark:          "",
+				ModifyAT:        time.Now(),
+				PreviewIconFile: "",
+				Version:         box.Version{},
+				Versions:        nil,
+			}
+			if i%2 == 0 {
+				module.Title = "bar"
+			}
+			p, _ := json.Marshal(module)
+			_, _, err := tx.Set(fmt.Sprintf("modules:%s", module.Id), string(p), nil)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if setErr != nil {
+		t.Error(setErr)
+		return
+	}
+
+	tx, txErr := db.Begin(true)
+	if txErr != nil {
+		t.Error(txErr)
+		return
+	}
+	defer tx.Rollback()
+	indexErr := tx.CreateIndex("modules_title", "*", buntdb.IndexJSON("title"), buntdb.IndexJSON("id"))
+	if indexErr != nil {
+		t.Error(indexErr)
+		return
+	}
+	defer tx.DropIndex("modules_title")
+
+	targets := make([]*box.Module, 0, 1)
+
+	ascErr := tx.Ascend("modules_title", func(key, value string) bool {
+		module := box.Module{}
+		err := json.Unmarshal([]byte(value), &module)
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		if module.Title == "foo" {
+			targets = append(targets, &module)
+		}
+		return true
+	})
+	if ascErr != nil {
+		t.Error(ascErr)
+		return
+	}
+
+	for _, target := range targets {
+		t.Log(target.Title, target.Id)
+	}
 
 }

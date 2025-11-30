@@ -132,6 +132,7 @@ type ModulePlan struct {
 	Filename      string        `json:"filename"`
 	IsDir         bool          `json:"isDir"`
 	Entries       []ImportEntry `json:"entries"`
+	Similar       []*Module     `json:"similar"` // 当相似存在，则手动选择是否添加（无相同版本）或覆盖（有相同版本）
 }
 
 func (module *ModulePlan) FileStructure() (st files.Structure, err error) {
@@ -218,6 +219,18 @@ func (bx *Box) MakeModuleImportPlan(param MakeModuleImportPlanParam) (plan *Impo
 				}
 				module.Existed = existed
 				plan.Modules[i] = module
+			} else { // find similar
+				// use title
+				modules, listErr := bx.ListModuleByTitle(module.Title)
+				if listErr != nil {
+					err = failure.Failed("创建模组导入计划失败", "判断模组是否存在错误").Wrap(listErr)
+					return
+				}
+				if len(modules) > 0 {
+					module.Existed = true
+					module.Similar = modules
+					plan.Modules[i] = module
+				}
 			}
 		}
 	}

@@ -18,6 +18,10 @@ export function ImportModules(arg1) {
   return window['go']['box']['Box']['ImportModules'](arg1);
 }
 
+export function ListModuleByTitle(arg1) {
+  return window['go']['box']['Box']['ListModuleByTitle'](arg1);
+}
+
 export function ListWorkshopModules() {
   return window['go']['box']['Box']['ListWorkshopModules']();
 }

@@ -10,6 +10,8 @@ export function GetModule(arg1:string):Promise<box.Module>;
 
 export function ImportModules(arg1:box.ImportPlan):Promise<Array<box.Module>>;
 
+export function ListModuleByTitle(arg1:string):Promise<Array<box.Module>>;
+
 export function ListWorkshopModules():Promise<Array<box.WorkshopModule>>;
 
 export function MakeModuleImportPlan(arg1:box.MakeModuleImportPlanParam):Promise<box.ImportPlan>;
