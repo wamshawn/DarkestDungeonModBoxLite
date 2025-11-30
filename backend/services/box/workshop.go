@@ -53,7 +53,7 @@ func (bx *Box) ListWorkshopModules() (v []WorkshopModule, err error) {
 		err = failure.Failed("工坊", "加载工坊失败").Wrap(dirErr)
 		return
 	}
-	entries, entriesErr := dir.DirList()
+	entries, entriesErr := dir.ListDir()
 	if entriesErr != nil {
 		err = failure.Failed("工坊", "加载工坊失败").Wrap(entriesErr)
 		return
@@ -62,7 +62,7 @@ func (bx *Box) ListWorkshopModules() (v []WorkshopModule, err error) {
 		return
 	}
 	// list mods
-	locals, _ := bx.moduleFS.DirList()
+	locals, _ := bx.moduleFS.ListDir()
 	if len(locals) > 0 {
 		sort.Strings(locals)
 	}
