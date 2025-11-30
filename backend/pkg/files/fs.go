@@ -60,7 +60,7 @@ func (df *DirFS) Rollback() {
 	df.scratches = df.scratches[:0]
 }
 
-func (df *DirFS) DirList() (v []string, err error) {
+func (df *DirFS) ListDir() (v []string, err error) {
 	entries, dirErr := fs.ReadDir(df.dir, ".")
 	if dirErr != nil {
 		err = dirErr
