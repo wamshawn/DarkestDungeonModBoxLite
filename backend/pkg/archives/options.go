@@ -1,7 +1,6 @@
 package archives
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -205,7 +204,8 @@ func (option *Option) update(target string, password string, discard bool, extra
 		if option.filename == "" {
 			option.filename = dirs[0]
 		} else {
-			panic(fmt.Errorf("%s is not in tree", target))
+			//panic(fmt.Errorf("%s is not in tree", target))
+			return
 		}
 	}
 	dirs = dirs[1:]
