@@ -156,7 +156,35 @@ func (df *DirFS) FileInfo(name string) (v *FileInfo, err error) {
 }
 
 func (df *DirFS) ReadFile(name string) (data []byte, err error) {
-	return fs.ReadFile(df.dir, name)
+	dir, file := filepath.Split(name)
+	if dir == "" {
+		data, err = fs.ReadFile(df.dir, name)
+		return
+	}
+	dirs := splitDirs(dir)
+	sub, subErr := NewDirFS(filepath.Join(df.path, dirs[0]))
+	if subErr != nil {
+		err = subErr
+		return
+	}
+	data, err = sub.ReadFile(filepath.Join(filepath.Join(dirs[1:]...), file))
+	return
+}
+
+func (df *DirFS) OpenFile(name string) (v *os.File, err error) {
+	dir, file := filepath.Split(name)
+	if dir == "" {
+		v, err = os.OpenFile(filepath.Join(df.path, file), os.O_RDONLY, 0644)
+		return
+	}
+	dirs := splitDirs(dir)
+	sub, subErr := NewDirFS(filepath.Join(df.path, dirs[0]))
+	if subErr != nil {
+		err = subErr
+		return
+	}
+	v, err = sub.OpenFile(filepath.Join(filepath.Join(dirs[1:]...), file))
+	return
 }
 
 func (df *DirFS) WriteFile(name string, data []byte) (err error) {

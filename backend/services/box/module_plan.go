@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,17 @@ type ImportEntry struct {
 	Children []ImportEntry `json:"children"`
 }
 
+func (entry *ImportEntry) FlatFilenames() []string {
+	result := make([]string, 0, 1)
+	if entry.Chosen {
+		result = append(result, filepath.ToSlash(entry.Filename))
+		for _, child := range entry.Children {
+			result = append(result, child.FlatFilenames()...)
+		}
+	}
+	return result
+}
+
 func (entry *ImportEntry) mountArchiveFileInfo(info *archives.FileInfo, chosen bool) {
 	for _, child := range info.Children {
 		c := ImportEntry{
@@ -66,21 +78,22 @@ func (entry *ImportEntry) mountArchiveFileInfo(info *archives.FileInfo, chosen b
 	}
 }
 
-func (entry *ImportEntry) mountDir(filename string, chosen bool) {
+func (entry *ImportEntry) mountDir(base string, filename string, chosen bool) {
 	items, dirErr := fs.ReadDir(os.DirFS(filename), ".")
 	if dirErr != nil {
 		return
 	}
 	for _, item := range items {
 		itemPath := filepath.ToSlash(filepath.Join(filename, item.Name()))
+		name, _ := filepath.Rel(base, itemPath)
 		c := ImportEntry{
 			Chosen:   chosen,
 			Key:      strconv.FormatUint(xxhash.Sum64String(itemPath), 16),
-			Filename: itemPath,
+			Filename: filepath.ToSlash(name),
 			Children: nil,
 		}
 		if item.IsDir() {
-			c.mountDir(itemPath, chosen)
+			c.mountDir(base, itemPath, chosen)
 		}
 		entry.Children = append(entry.Children, c)
 	}
@@ -123,6 +136,7 @@ func (entry *ImportEntry) String() string {
 }
 
 type ModulePlan struct {
+	Id            string        `json:"id"`
 	Existed       bool          `json:"existed"`
 	Kind          string        `json:"kind"`
 	PublishFileId string        `json:"publishFileId"`
@@ -132,7 +146,18 @@ type ModulePlan struct {
 	Filename      string        `json:"filename"`
 	IsDir         bool          `json:"isDir"`
 	Entries       []ImportEntry `json:"entries"`
-	Similar       []*Module     `json:"similar"` // 当相似存在，则手动选择是否添加（无相同版本）或覆盖（有相同版本）
+	Similar       []*Module     `json:"similar"`  // 当相似存在，则手动选择是否添加（无相同版本）或覆盖（有相同版本）
+	Dst           *Module       `json:"dst"`      // 参数用：当 dst 存在，则往 dst 中添加或覆盖。
+	Override      *Version      `json:"override"` // 参数用：当 override 存在，则覆盖 dst 中的版本。
+}
+
+func (module *ModulePlan) FlatEntryFilenames() []string {
+	result := make([]string, 0, 1)
+	for _, entry := range module.Entries {
+		result = append(result, entry.FlatFilenames()...)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (module *ModulePlan) FileStructure() (st files.Structure, err error) {
@@ -168,6 +193,7 @@ type ImportPlan struct {
 	Source   string                  `json:"source"`
 	Archived *ImportArchiveFileStats `json:"archived"`
 	Invalid  bool                    `json:"invalid"`
+	IsDir    bool                    `json:"isDir"`
 	Modules  []ModulePlan            `json:"modules"`
 }
 
@@ -209,6 +235,7 @@ func (bx *Box) MakeModuleImportPlan(param MakeModuleImportPlanParam) (plan *Impo
 		plan, err = MakeModuleImportPlanByArchiveFile(bx.ctx, param)
 	}
 	if plan != nil {
+		plan.IsDir = isDir
 		// check existed
 		for i, module := range plan.Modules {
 			if module.PublishFileId != "" {
@@ -217,7 +244,16 @@ func (bx *Box) MakeModuleImportPlan(param MakeModuleImportPlanParam) (plan *Impo
 					err = failure.Failed("创建模组导入计划失败", "判断模组是否存在错误").Wrap(existsErr)
 					return
 				}
-				module.Existed = existed
+				if existed {
+					module.Dst, _ = bx.GetModule(module.PublishFileId)
+					for _, vm := range module.Dst.Versions {
+						if vm.Version.Compare(module.Version) == 0 {
+							module.Override = &vm.Version
+							module.Existed = existed
+							break
+						}
+					}
+				}
 				plan.Modules[i] = module
 			} else { // find similar
 				// use title
@@ -514,14 +550,15 @@ func MakeModuleImportPlanByDir(_ context.Context, param MakeModuleImportPlanPara
 			}
 		}
 		itemPath := filepath.ToSlash(filepath.Join(param.Filename, item.Name()))
+		filename, _ := filepath.Rel(param.Filename, itemPath)
 		entry := ImportEntry{
 			Chosen:   chosen,
 			Key:      strconv.FormatUint(xxhash.Sum64String(itemPath), 16),
-			Filename: itemPath,
+			Filename: filename,
 			Children: nil,
 		}
 		if item.IsDir() {
-			entry.mountDir(itemPath, chosen)
+			entry.mountDir(param.Filename, itemPath, chosen)
 		}
 		module.Entries = append(module.Entries, entry)
 	}

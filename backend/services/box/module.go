@@ -49,8 +49,9 @@ type VersionedModule struct {
 mods/
  {id}/
   {version}/
-   {data_path}/
+	project.xml
 	preview_icon.png
+	...
 */
 type Module struct {
 	Id              string            `json:"id"`
