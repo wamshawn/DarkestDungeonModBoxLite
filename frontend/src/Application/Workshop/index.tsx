@@ -1,5 +1,5 @@
-import {App, Badge, Card, Flex, FloatButton, Spin, Tag} from "antd";
-import {RetweetOutlined, CopyOutlined} from '@ant-design/icons';
+import {App, Badge, Card, Flex, FloatButton, Spin, Tag, Tooltip, Typography} from "antd";
+import {CopyOutlined, RetweetOutlined} from '@ant-design/icons';
 import {proxy} from "valtio/vanilla";
 import {box} from "../../../wailsjs/go/models";
 import {useAsyncEffect} from "ahooks";
@@ -10,6 +10,7 @@ import {ListWorkshopModules} from "../../../wailsjs/go/box/Box";
 import {Limage} from "../../components/Limage/Limage";
 
 const {Meta} = Card;
+const {Text} = Typography;
 
 type WorkshopModule = {
     module: box.WorkshopModule;
@@ -33,8 +34,8 @@ const state = proxy<State>({
     loading: false,
     modules: [],
     syncing: {
-        total:0,
-        current:0,
+        total: 0,
+        current: 0,
         processing: false,
     },
 });
@@ -43,12 +44,17 @@ const Index = () => {
     const {notification} = App.useApp();
     const snap = useSnapshot(state)
     useAsyncEffect(async () => {
-       await reflush()
+        await reflush()
     }, [])
 
     const reflush = async () => {
         if (state.syncing.processing) {
-            notification.warning({title:"警告", description: "请等待同步结束", placement: "bottomRight", duration: 3000})
+            notification.warning({
+                title: "警告",
+                description: "请等待同步结束",
+                placement: "bottomRight",
+                duration: 3000
+            })
             return;
         }
         state.modules = new Array<WorkshopModule>();
@@ -70,7 +76,7 @@ const Index = () => {
             }
             return;
         }
-        if (r.value().length > 0 ) {
+        if (r.value().length > 0) {
             state.modules = r.value().map((item) => {
                 return {
                     module: item,
@@ -82,10 +88,14 @@ const Index = () => {
     }
 
 
-
     const syncing = async () => {
         if (state.modules.length == 0) {
-            notification.warning({title:"同步", description: "无新模组待同步", placement: "bottomRight", duration: 3000})
+            notification.warning({
+                title: "同步",
+                description: "无新模组待同步",
+                placement: "bottomRight",
+                duration: 3000
+            })
             return;
         }
         state.modules.forEach((item) => {
@@ -95,7 +105,12 @@ const Index = () => {
             }
         })
         if (state.syncing.total === 0) {
-            notification.warning({title:"同步", description: "无新模组待同步", placement: "bottomRight", duration: 3000})
+            notification.warning({
+                title: "同步",
+                description: "无新模组待同步",
+                placement: "bottomRight",
+                duration: 3000
+            })
             return;
         }
         state.syncing.processing = true;
@@ -128,35 +143,43 @@ const Index = () => {
     return (
         <Flex>
             <Spin spinning={snap.loading} size={"large"} fullscreen={true}/>
-            <Flex wrap gap="middle" >
+            <Flex wrap gap="middle">
                 {snap.modules.map((item, i) => {
                     const module = item.module
                     let tags: readonly string[] = []
                     if (module.tags && module.tags.length > 0) {
                         tags = module.tags
                     }
+                    const version = `v${module.version.major}.${module.version.minor}.${module.version.patch}`
                     return (
                         <Spin key={`spin_${module.id}`} spinning={item.syncing} size={"small"}>
                             <Badge.Ribbon color={module.synced ? "" : "cyan"}
-                                          text={module.synced ? `${module.id}` : `(NEW) ${module.id}`}>
+                                          text={module.synced ? version : `(NEW) ${version}`}>
                                 <Card
                                     key={i}
                                     hoverable
                                     style={{width: 240}}
                                     cover={
                                         <Limage
+                                            preview={false}
                                             width={240}
                                             height={240}
                                             alt={module.id}
                                             src={module.icon}
                                         />
                                     }
-                                    onClick={async () => {}}
+                                    onClick={async () => {
+                                    }}
                                 >
-                                    <Meta title={module.title}
-                                          description={<Flex wrap gap="small">{tags.map((tag) => (
-                                              <Tag variant="filled" color="cyan">{tag}</Tag>
-                                          ))}</Flex>}/>
+                                    <Meta
+                                        title={
+                                            <Tooltip title={`[${module.id}] ${module.title}`}>
+                                                <Text ellipsis={true}>{module.title}</Text>
+                                            </Tooltip>
+                                        }
+                                        description={<Flex wrap gap="small">{tags.map((tag) => (
+                                            <Tag variant="filled" color="cyan">{tag}</Tag>
+                                        ))}</Flex>}/>
                                 </Card>
                             </Badge.Ribbon>
                         </Spin>
@@ -164,12 +187,16 @@ const Index = () => {
                 })}
             </Flex>
             <FloatButton
-                icon={<CopyOutlined />} type="default" style={{ insetBlockEnd: 108 }} tooltip={<div>同步至模组管理器</div>}
-                onClick={async () => {await syncing()}}
+                icon={<CopyOutlined/>} type="default" style={{insetBlockEnd: 108}} tooltip={<div>同步至模组管理器</div>}
+                onClick={async () => {
+                    await syncing()
+                }}
             />
             <FloatButton
                 icon={<RetweetOutlined/>} type="primary" tooltip={<div>刷新</div>}
-                onClick={async () => { await reflush() }}
+                onClick={async () => {
+                    await reflush()
+                }}
             />
         </Flex>
     );

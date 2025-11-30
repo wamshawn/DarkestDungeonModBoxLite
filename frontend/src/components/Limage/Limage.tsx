@@ -25,6 +25,7 @@ export const Limage = (props :ImageProps) => {
     return (
         <Spin spinning={loading}>
             <Image
+                preview={props.preview}
                 loading={props.loading}
                 width={props.width}
                 height={props.height}

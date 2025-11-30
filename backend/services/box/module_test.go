@@ -38,7 +38,7 @@ func TestMakeModuleImportPlanByArchiveFile(t *testing.T) {
 func TestMakeModuleImportPlanByDir(t *testing.T) {
 	ctx := context.Background()
 	param := box.MakeModuleImportPlanParam{
-		Filename: `F:\games\steam\steamapps\workshop\content\262060\3440075069`,
+		Filename: `F:\games\暗黑地牢\mods\heros\antiquarian\skin\001`,
 	}
 	plan, makeErr := box.MakeModuleImportPlanByDir(ctx, param)
 	if makeErr != nil {

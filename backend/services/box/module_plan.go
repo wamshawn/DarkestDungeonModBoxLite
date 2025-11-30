@@ -126,6 +126,7 @@ type ModulePlan struct {
 	Existed       bool          `json:"existed"`
 	Kind          string        `json:"kind"`
 	PublishFileId string        `json:"publishFileId"`
+	Version       Version       `json:"version"`
 	Title         string        `json:"title"`
 	IconBase64    string        `json:"iconBase64"`
 	Filename      string        `json:"filename"`
@@ -150,11 +151,11 @@ func (module *ModulePlan) FileStructure() (st files.Structure, err error) {
 func (module *ModulePlan) String() string {
 	buf := bytes.NewBuffer(nil)
 	if module.IsDir {
-		buf.WriteString(fmt.Sprintf("[DIRECTORY][id: %s][kind: %s][existed: %t][title: %s][file: %s] \n",
-			module.PublishFileId, module.Kind, module.Existed, module.Title, module.Filename))
+		buf.WriteString(fmt.Sprintf("[DIRECTORY][id: %s][ver: %s][kind: %s][existed: %t][title: %s][icon: %d][file: %s] \n",
+			module.PublishFileId, module.Version, module.Kind, module.Existed, module.Title, len(module.IconBase64), module.Filename))
 	} else {
-		buf.WriteString(fmt.Sprintf("[ ARCHIVED][id: %s][kind: %s][existed: %t][title: %s][file: %s] \n",
-			module.PublishFileId, module.Kind, module.Existed, module.Title, module.Filename))
+		buf.WriteString(fmt.Sprintf("[ ARCHIVED][id: %s][ver: %s][kind: %s][existed: %t][title: %s][icon: %d][file: %s] \n",
+			module.PublishFileId, module.Version, module.Kind, module.Existed, module.Title, len(module.IconBase64), module.Filename))
 	}
 	for _, entry := range module.Entries {
 		buf.WriteString(entry.String())
@@ -326,7 +327,14 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 		}
 		parent := projectInfo.Parent
 		module := ModulePlan{
-			Kind:       "",
+			Existed:       false,
+			Kind:          "",
+			PublishFileId: "",
+			Version: Version{
+				Major: 0,
+				Minor: 0,
+				Patch: 0,
+			},
 			Title:      "",
 			IconBase64: "",
 			Filename:   filepath.ToSlash(projectInfo.Parent.Path()),
@@ -342,25 +350,32 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 		}
 		module.PublishFileId = strings.TrimSpace(project.PublishedFileId)
 		module.Title = project.Title
+		if version, versionErr := project.Version(); versionErr == nil {
+			module.Version = version
+		}
+
+		previewIconFile := strings.TrimSpace(project.PreviewIconFile)
+		if previewIconFile == "" {
+			previewIconFile = "preview_icon.png"
+		}
+		previewIconFile = filepath.ToSlash(previewIconFile)
 		gameStruct := GetModuleFileStruct()
 		for _, child := range parent.Children {
 			chosen := false
-			childName := filepath.Base(child.Name)
-			switch childName {
-			case "preview_icon.png":
+			childFilename := filepath.ToSlash(child.Name)
+			if _, foundIcon := strings.CutSuffix(childFilename, previewIconFile); foundIcon {
 				if len(child.Preview) > 0 {
-					module.IconBase64, _ = images.EncodeBytes("preview_icon.png", child.Preview)
+					module.IconBase64, _ = images.EncodeBytes(filepath.Base(previewIconFile), child.Preview)
 					chosen = true
 				}
-				break
-			default:
+			} else {
+				childName := filepath.Base(child.Name)
 				for _, structure := range gameStruct.Children {
 					if structure.Name == childName {
 						chosen = true
 						break
 					}
 				}
-				break
 			}
 			entry := ImportEntry{
 				Chosen:   chosen,
@@ -372,6 +387,10 @@ func MakeModuleImportPlanByArchiveFile(ctx context.Context, param MakeModuleImpo
 				entry.mountArchiveFileInfo(child, chosen)
 			}
 			module.Entries = append(module.Entries, entry)
+		}
+		if module.IconBase64 == "" {
+			err = failure.Failed("导入压缩包失败", fmt.Sprintf("%s 内缺失图标文件", param.Filename))
+			return
 		}
 		// get kind
 		for _, tag := range project.Tags.Tags {
@@ -432,17 +451,22 @@ func MakeModuleImportPlanByDir(_ context.Context, param MakeModuleImportPlanPara
 		err = failure.Failed("导入压缩包失败", fmt.Sprintf("解析 %s 失败", filepath.Join(param.Filename, "project.xml")))
 		return
 	}
+	previewIconFile := strings.TrimSpace(project.PreviewIconFile)
+	if previewIconFile == "" {
+		previewIconFile = "preview_icon.png"
+	}
+	previewIconFile = filepath.ToSlash(previewIconFile)
 	// icon
-	iconBytes, readIconErr := fs.ReadFile(dir, "preview_icon.png")
+	iconBytes, readIconErr := os.ReadFile(filepath.Join(param.Filename, previewIconFile))
 	if readIconErr != nil {
 		if os.IsNotExist(readIconErr) {
-			err = failure.Failed("导入压缩包失败", fmt.Sprintf("%s 内缺失 preview_icon.png", param.Filename))
+			err = failure.Failed("导入压缩包失败", fmt.Sprintf("%s 内缺失图标文件", param.Filename))
 			return
 		}
-		err = failure.Failed("导入压缩包失败", fmt.Sprintf("读取 %s 中 preview_icon.png 失败", param.Filename))
+		err = failure.Failed("导入压缩包失败", fmt.Sprintf("读取 %s 中图标文件失败", param.Filename))
 		return
 	}
-	iconBase64, iconBase64Err := images.EncodeBytes("preview_icon.png", iconBytes)
+	iconBase64, iconBase64Err := images.EncodeBytes(filepath.Base(previewIconFile), iconBytes)
 	if iconBase64Err != nil {
 		err = failure.Failed("导入压缩包失败", fmt.Sprintf("解析 %s 失败", filepath.Join(param.Filename, "preview_icon.png")))
 		return
@@ -464,7 +488,9 @@ func MakeModuleImportPlanByDir(_ context.Context, param MakeModuleImportPlanPara
 		IsDir:         true,
 		Entries:       nil,
 	}
-
+	if version, versionErr := project.Version(); versionErr == nil {
+		module.Version = version
+	}
 	gameStruct := GetModuleFileStruct()
 	for _, item := range entries {
 		chosen := false

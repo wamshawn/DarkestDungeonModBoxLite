@@ -25,11 +25,12 @@ func (bx *Box) StopSyncWorkshopMods(pid string) (err error) {
 }
 
 type WorkshopModule struct {
-	Id     string   `json:"id"`
-	Title  string   `json:"title"`
-	Icon   string   `json:"icon"`
-	Synced bool     `json:"synced"`
-	Tags   []string `json:"tags"`
+	Id      string   `json:"id"`
+	Title   string   `json:"title"`
+	Icon    string   `json:"icon"`
+	Synced  bool     `json:"synced"`
+	Version Version  `json:"version"`
+	Tags    []string `json:"tags"`
 }
 
 func (bx *Box) ListWorkshopModules() (v []WorkshopModule, err error) {
@@ -92,12 +93,16 @@ func (bx *Box) ListWorkshopModules() (v []WorkshopModule, err error) {
 			icon = filepath.Join(sub.Path(), icon)
 			_, _ = db.GetImage(icon, 15*24*time.Hour)
 		}
+
+		version, _ := project.Version()
+
 		v = append(v, WorkshopModule{
-			Id:     project.PublishedFileId,
-			Title:  project.Title,
-			Icon:   icon,
-			Synced: found,
-			Tags:   project.ListTags(),
+			Id:      project.PublishedFileId,
+			Title:   project.Title,
+			Icon:    icon,
+			Synced:  found,
+			Version: version,
+			Tags:    project.ListTags(),
 		})
 	}
 	return
