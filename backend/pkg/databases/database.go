@@ -183,7 +183,7 @@ func (db *Database) Get(key string, value any) (has bool, err error) {
 	return
 }
 
-func (db *Database) AscendKey(key string, values any, less ...func(string, string) bool) (err error) {
+func (db *Database) AscendKey(key string, values any, filter func(key, value string) bool, less ...func(string, string) bool) (err error) {
 	tx, txErr := db.kv.Begin(true)
 	if txErr != nil {
 		err = txErr
@@ -200,6 +200,9 @@ func (db *Database) AscendKey(key string, values any, less ...func(string, strin
 	buf.WriteByte('[')
 	i := 0
 	err = tx.Ascend(index, func(key, value string) bool {
+		if filter != nil && !filter(key, value) {
+			return true
+		}
 		if i > 0 {
 			buf.WriteByte(',')
 		}
@@ -217,12 +220,15 @@ func (db *Database) AscendKey(key string, values any, less ...func(string, strin
 	return
 }
 
-func (db *Database) AscendKeys(pattern string, values any) (err error) {
+func (db *Database) AscendKeys(pattern string, values any, filter func(key, value string) bool) (err error) {
 	buf := bytes.NewBuffer(nil)
 	buf.WriteByte('[')
 	err = db.kv.View(func(tx *buntdb.Tx) error {
 		i := 0
 		return tx.AscendKeys(pattern, func(key, value string) bool {
+			if filter != nil && !filter(key, value) {
+				return true
+			}
 			if i > 0 {
 				buf.WriteByte(',')
 			}
@@ -241,12 +247,15 @@ func (db *Database) AscendKeys(pattern string, values any) (err error) {
 	return
 }
 
-func (db *Database) Ascend(index string, values any) (err error) {
+func (db *Database) Ascend(index string, values any, filter func(key, value string) bool) (err error) {
 	buf := bytes.NewBuffer(nil)
 	buf.WriteByte('[')
 	err = db.kv.View(func(tx *buntdb.Tx) error {
 		i := 0
 		return tx.Ascend(index, func(key, value string) bool {
+			if filter != nil && !filter(key, value) {
+				return true
+			}
 			if i > 0 {
 				buf.WriteByte(',')
 			}
@@ -265,7 +274,7 @@ func (db *Database) Ascend(index string, values any) (err error) {
 	return
 }
 
-func (db *Database) Range(index string, beg uint, end uint, values any) (err error) {
+func (db *Database) Range(index string, beg uint, end uint, values any, filter func(key, value string) bool) (err error) {
 	rt := reflect.TypeOf(values)
 	if rt.Kind() != reflect.Ptr {
 		err = errors.New("values must be a pointer")
@@ -300,6 +309,9 @@ func (db *Database) Range(index string, beg uint, end uint, values any) (err err
 	err = db.kv.View(func(tx *buntdb.Tx) error {
 		i := 0
 		return tx.AscendRange(index, begFlag, endFlag, func(key, value string) bool {
+			if filter != nil && !filter(key, value) {
+				return true
+			}
 			if i > 0 {
 				buf.WriteByte(',')
 			}
